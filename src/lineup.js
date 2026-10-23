@@ -161,19 +161,19 @@ export async function refreshLineup() {
         + 'so they bypass conversion and connection limits. In the manager, set this output\'s Stream mode to Proxy.');
     }
 
-    let programmes = 0;
+    let programs = 0;
     if (config.epgUrl) {
       const text = await fetchText(config.epgUrl);
       const wanted = new Set(channels.map((c) => c.tvg_id).filter(Boolean));
       const cutoff = now() - 6 * 3600;
       transaction(() => {
-        db.exec('DELETE FROM programmes');
-        const insert = db.prepare(`INSERT INTO programmes (tvg_id, start, stop, title, subtitle, descr, category, season, episode, icon)
+        db.exec('DELETE FROM programs');
+        const insert = db.prepare(`INSERT INTO programs (tvg_id, start, stop, title, subtitle, descr, category, season, episode, icon)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         for (const p of parseXMLTV(text)) {
           if (p.stop < cutoff || !wanted.has(p.tvg_id)) continue;
           insert.run(p.tvg_id, p.start, p.stop, p.title, p.subtitle, p.descr, p.category, p.season, p.episode, p.icon);
-          programmes++;
+          programs++;
         }
       });
       followGuideChanges();
@@ -181,7 +181,7 @@ export async function refreshLineup() {
 
     lineupState.lastRefresh = now();
     lineupState.error = '';
-    log(`Lineup refreshed: ${channels.length} channels, ${programmes} programmes.`);
+    log(`Lineup refreshed: ${channels.length} channels, ${programs} programs.`);
   } catch (err) {
     lineupState.error = err.message;
     log(`Lineup refresh failed: ${err.message}`);
@@ -194,9 +194,9 @@ export async function refreshLineup() {
 // same title, within 4 hours) is moved. One that has vanished gets a notice.
 function followGuideChanges() {
   const scheduled = db.prepare("SELECT * FROM recordings WHERE status = 'scheduled' AND from_guide = 1").all();
-  const candidates = db.prepare(`SELECT * FROM programmes WHERE tvg_id = ? AND title = ?
+  const candidates = db.prepare(`SELECT * FROM programs WHERE tvg_id = ? AND title = ?
     AND start BETWEEN ? AND ? ORDER BY ABS(start - ?) LIMIT 1`);
-  const coverage = db.prepare('SELECT MAX(stop) AS last FROM programmes WHERE tvg_id = ?');
+  const coverage = db.prepare('SELECT MAX(stop) AS last FROM programs WHERE tvg_id = ?');
   for (const rec of scheduled) {
     const match = candidates.get(rec.tvg_id, rec.title, rec.start - 4 * 3600, rec.start + 4 * 3600, rec.start);
     if (match) {

@@ -1,5 +1,5 @@
 const $ = (sel) => document.querySelector(sel);
-const FAVOURITES = '__favourites';
+const FAVORITES = '__favorites';
 const ROW = 56;
 const SLOT = 1800;
 
@@ -78,10 +78,11 @@ function showTab(tab) {
 async function loadGroups() {
   state.groups = await api('GET', '/api/groups');
   const saved = recall('group');
-  if (!state.group || !state.groups.some((g) => g.name === state.group)) {
-    const fav = state.groups.find((g) => g.name === FAVOURITES);
+  const fav = state.groups.find((g) => g.name === FAVORITES);
+  const emptyFavorites = state.group === FAVORITES && !fav?.count && saved !== FAVORITES;
+  if (!state.group || emptyFavorites || !state.groups.some((g) => g.name === state.group)) {
     state.group = state.groups.some((g) => g.name === saved) ? saved
-      : fav?.count ? FAVOURITES : state.groups.find((g) => g.name !== FAVOURITES)?.name || FAVOURITES;
+      : fav?.count ? FAVORITES : state.groups.find((g) => g.name !== FAVORITES)?.name || FAVORITES;
   }
   renderGroups();
 }
@@ -90,10 +91,10 @@ function renderGroups() {
   const filter = $('#groupFilter').value.trim().toLowerCase();
   $('#groupList').innerHTML = state.groups
     .filter((g) => !filter || g.label.toLowerCase().includes(filter))
-    .map((g) => `<button data-group="${esc(g.name)}" class="${g.name === state.group ? 'active' : ''} ${g.name === FAVOURITES ? 'fav' : ''}">
-      <span>${g.name === FAVOURITES ? '★ ' : ''}${esc(g.label)}</span><span>${g.count}</span></button>`).join('');
+    .map((g) => `<button data-group="${esc(g.name)}" class="${g.name === state.group ? 'active' : ''} ${g.name === FAVORITES ? 'fav' : ''}">
+      <span>${g.name === FAVORITES ? '★ ' : ''}${esc(g.label)}</span><span>${g.count}</span></button>`).join('');
   $('#groupSelect').innerHTML = state.groups
-    .map((g) => `<option value="${esc(g.name)}" ${g.name === state.group ? 'selected' : ''}>${g.name === FAVOURITES ? '★ ' : ''}${esc(g.label)} (${g.count})</option>`).join('');
+    .map((g) => `<option value="${esc(g.name)}" ${g.name === state.group ? 'selected' : ''}>${g.name === FAVORITES ? '★ ' : ''}${esc(g.label)} (${g.count})</option>`).join('');
 }
 
 function pickGroup(name) {
@@ -154,7 +155,7 @@ function renderRows() {
   const rows = $('#guideRows');
   rows.style.height = `${g.channels.length * ROW}px`;
   if (!g.channels.length) {
-    rows.innerHTML = `<div class="empty-state">${state.group === FAVOURITES ? 'Star channels (☆) to collect them here.' : 'No channels in this group.'}</div>`;
+    rows.innerHTML = `<div class="empty-state">${state.group === FAVORITES ? 'Star channels (☆) to collect them here.' : 'No channels in this group.'}</div>`;
     rows.style.height = 'auto';
     return;
   }
@@ -174,7 +175,7 @@ function rowHtml(ch, i) {
   const g = state.guide;
   const span = g.end - g.start;
   const pos = (t) => Math.min(100, Math.max(0, ((t - g.start) / span) * 100));
-  const progs = (ch.tvg_id && g.programmes[ch.tvg_id]) || [];
+  const progs = (ch.tvg_id && g.programs[ch.tvg_id]) || [];
   const recs = g.recordings.filter((r) => r.channel_id === ch.id);
   const t = nowSec();
   const cells = progs.map((p) => {
@@ -195,7 +196,7 @@ function rowHtml(ch, i) {
   const nowLine = t >= g.start && t < g.end ? `<div class="now-line" style="left:${pos(t)}%"></div>` : '';
   return `<div class="row" style="top:${i * ROW}px">
     <div class="chan">
-      <button class="star ${ch.favourite ? 'on' : ''}" data-star="${esc(ch.id)}" title="${ch.favourite ? 'Remove from favourites' : 'Add to favourites'}">${ch.favourite ? '★' : '☆'}</button>
+      <button class="star ${ch.favorite ? 'on' : ''}" data-star="${esc(ch.id)}" title="${ch.favorite ? 'Remove from favorites' : 'Add to favorites'}">${ch.favorite ? '★' : '☆'}</button>
       <span class="num">${ch.number ?? ''}</span>
       ${ch.logo ? `<img src="${esc(ch.logo)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : ''}
       <span class="name" data-manual="${esc(ch.id)}" title="${esc(ch.name)} · record by time">${esc(ch.name)}</span>
@@ -207,10 +208,10 @@ $('#guideRows').addEventListener('click', async (e) => {
   const star = e.target.closest('[data-star]');
   if (star) {
     const ch = state.guide.channels.find((c) => c.id === star.dataset.star);
-    ch.favourite = ch.favourite ? 0 : 1;
-    await api('POST', `/api/channels/${encodeURIComponent(ch.id)}/favourite`, { favourite: !!ch.favourite });
+    ch.favorite = ch.favorite ? 0 : 1;
+    await api('POST', `/api/channels/${encodeURIComponent(ch.id)}/favorite`, { favorite: !!ch.favorite });
     await loadGroups();
-    if (state.group === FAVOURITES) loadGuide(); else renderRows();
+    if (state.group === FAVORITES) loadGuide(); else renderRows();
     return;
   }
   const manual = e.target.closest('[data-manual]');
@@ -221,8 +222,8 @@ $('#guideRows').addEventListener('click', async (e) => {
   const prog = e.target.closest('[data-prog]');
   if (prog) {
     const ch = state.guide.channels.find((c) => c.id === prog.dataset.chan);
-    const p = state.guide.programmes[ch.tvg_id].find((x) => x.id === Number(prog.dataset.prog));
-    openProgrammeDialog(p, { id: ch.id, name: ch.name });
+    const p = state.guide.programs[ch.tvg_id].find((x) => x.id === Number(prog.dataset.prog));
+    openProgramDialog(p, { id: ch.id, name: ch.name });
   }
 });
 
@@ -274,7 +275,7 @@ $('#results').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-result]');
   if (!btn) return;
   const p = state.searchResults[Number(btn.dataset.result)];
-  openProgrammeDialog(p, { id: p.channel_id, name: p.channel_name });
+  openProgramDialog(p, { id: p.channel_id, name: p.channel_name });
 });
 
 // ---------- dialogs ----------
@@ -318,7 +319,7 @@ function readPadding() {
   return { prePad: Number(form.elements.prePad.value), postPad: Number(form.elements.postPad.value) };
 }
 
-async function openProgrammeDialog(p, ch) {
+async function openProgramDialog(p, ch) {
   const s = state.settings || await loadSettingsData();
   const existing = await findScheduled(ch.id, p.start);
   const episode = p.season && p.episode ? `S${String(p.season).padStart(2, '0')}E${String(p.episode).padStart(2, '0')} · ` : '';
@@ -336,7 +337,7 @@ async function openProgrammeDialog(p, ch) {
         : p.stop > nowSec() ? '<button type="button" class="primary" id="dlgRecord">Record</button>' : ''}
     </div>`;
   form.querySelector('#dlgRecord')?.addEventListener('click', (e) => {
-    submitRecording({ channelId: ch.id, programmeId: p.id, ...readPadding() }, e.currentTarget);
+    submitRecording({ channelId: ch.id, programId: p.id, ...readPadding() }, e.currentTarget);
   });
   form.querySelector('#dlgCancel')?.addEventListener('click', async () => {
     await api('DELETE', `/api/recordings/${existing.id}`);
@@ -535,13 +536,13 @@ $('#testNotify').addEventListener('click', async () => {
 $('#refreshBtn').addEventListener('click', async () => {
   await api('POST', '/api/refresh');
   $('#lineupInfo').textContent = 'Refreshing…';
-  setTimeout(async () => { await loadStatus(); await loadGroups(); loadGuide(); }, 4000);
+  setTimeout(loadStatus, 4000);
 });
 
 function renderLineupInfo() {
   const s = state.status;
   if (!s) return;
-  $('#lineupInfo').innerHTML = `${s.channels} channels, ${s.programmes} guide entries.
+  $('#lineupInfo').innerHTML = `${s.channels} channels, ${s.programs} guide entries.
     ${s.lastRefresh ? `Last refreshed ${fmtDay(s.lastRefresh)} ${fmtTime(s.lastRefresh)}.` : 'Not refreshed yet.'}
     At most ${s.maxStreams} recordings at once. Server time zone: ${esc(s.timeZone)}.
     ${s.error ? `<div class="err">${esc(s.error)}</div>` : ''}`;
@@ -556,6 +557,11 @@ async function loadStatus() {
     return;
   }
   const s = state.status;
+  // The lineup changed (first load finished, or a refresh): redraw groups and guide.
+  if (state.lastRefresh !== undefined && s.lastRefresh !== state.lastRefresh) {
+    loadGroups().then(loadGuide);
+  }
+  state.lastRefresh = s.lastRefresh;
   const pill = $('#statusPill');
   pill.textContent = s.recordingNow ? `● Recording ${s.recordingNow} of ${s.maxStreams}` : `${s.channels} channels`;
   pill.classList.toggle('live', s.recordingNow > 0);

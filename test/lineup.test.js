@@ -40,7 +40,7 @@ test('reads guide times with their offset', () => {
   assert.equal(parseXmltvTime('20261023220800 -0500'), Date.UTC(2026, 9, 24, 3, 8) / 1000);
 });
 
-test('reads programmes, episode numbers and entities', () => {
+test('reads programs, episode numbers and entities', () => {
   const xml = `<tv><programme start="20261023200000 +0000" stop="20261023210000 +0000" channel="HBO.us">
     <title>Tom &amp; Jerry</title><sub-title>Pilot</sub-title><desc>x</desc><category>Series</category>
     <episode-num system="xmltv_ns">1.4.</episode-num><icon src="http://x/p.jpg"/></programme></tv>`;

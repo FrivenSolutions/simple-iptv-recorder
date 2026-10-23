@@ -10,7 +10,7 @@ import { notify } from './notify.js';
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
-const FAVOURITES = '__favourites';
+const FAVORITES = '__favorites';
 
 class HttpError extends Error {
   constructor(status, message, extra = {}) { super(message); this.status = status; this.extra = extra; }
@@ -25,7 +25,7 @@ route('GET', '/api/status', () => ({
   error: lineupState.error,
   warnings: lineupState.warnings,
   channels: db.prepare('SELECT COUNT(*) AS n FROM channels WHERE present = 1').get().n,
-  programmes: db.prepare('SELECT COUNT(*) AS n FROM programmes').get().n,
+  programs: db.prepare('SELECT COUNT(*) AS n FROM programs').get().n,
   recordingNow: activeCount(),
   maxStreams: config.maxStreams,
   timeZone: config.timeZone,
@@ -34,8 +34,8 @@ route('GET', '/api/status', () => ({
 route('GET', '/api/groups', () => {
   const groups = db.prepare(`SELECT grp AS name, COUNT(*) AS count FROM channels WHERE present = 1
     GROUP BY grp ORDER BY MIN(sort)`).all();
-  const favourites = db.prepare('SELECT COUNT(*) AS n FROM channels WHERE present = 1 AND favourite = 1').get().n;
-  return [{ name: FAVOURITES, label: 'Favourites', count: favourites }, ...groups.map((g) => ({ ...g, label: g.name }))];
+  const favorites = db.prepare('SELECT COUNT(*) AS n FROM channels WHERE present = 1 AND favorite = 1').get().n;
+  return [{ name: FAVORITES, label: 'Favorites', count: favorites }, ...groups.map((g) => ({ ...g, label: g.name }))];
 });
 
 const CHANNEL_ORDER = 'ORDER BY number IS NULL, number, sort';
@@ -44,17 +44,17 @@ route('GET', '/api/guide', (req, q) => {
   const start = Number(q.get('start')) || now();
   const end = start + Math.min(Number(q.get('hours')) || 4, 24) * 3600;
   const group = q.get('group') || '';
-  const channels = group === FAVOURITES
-    ? db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favourite FROM channels WHERE present = 1 AND favourite = 1 ${CHANNEL_ORDER}`).all()
-    : db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favourite FROM channels WHERE present = 1 AND grp = ? ${CHANNEL_ORDER}`).all(group);
+  const channels = group === FAVORITES
+    ? db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favorite FROM channels WHERE present = 1 AND favorite = 1 ${CHANNEL_ORDER}`).all()
+    : db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favorite FROM channels WHERE present = 1 AND grp = ? ${CHANNEL_ORDER}`).all(group);
   const ids = [...new Set(channels.map((c) => c.tvg_id).filter(Boolean))];
-  const programmes = {};
-  const select = db.prepare(`SELECT id, tvg_id, start, stop, title, subtitle, descr, category, season, episode FROM programmes
+  const programs = {};
+  const select = db.prepare(`SELECT id, tvg_id, start, stop, title, subtitle, descr, category, season, episode FROM programs
     WHERE tvg_id = ? AND stop > ? AND start < ? ORDER BY start`);
-  for (const id of ids) programmes[id] = select.all(id, start, end);
+  for (const id of ids) programs[id] = select.all(id, start, end);
   const recordings = db.prepare(`SELECT id, channel_id, start, stop, status FROM recordings
     WHERE status IN ('scheduled', 'recording') AND stop > ? AND start < ?`).all(start, end);
-  return { start, end, channels, programmes, recordings };
+  return { start, end, channels, programs, recordings };
 });
 
 route('GET', '/api/search', (req, q) => {
@@ -63,7 +63,7 @@ route('GET', '/api/search', (req, q) => {
   const like = `%${text.replace(/[%_]/g, (c) => `\\${c}`)}%`;
   return db.prepare(`SELECT p.id, p.tvg_id, p.start, p.stop, p.title, p.subtitle, p.descr, p.category, p.season, p.episode,
       c.id AS channel_id, c.name AS channel_name, c.number AS channel_number, c.grp
-    FROM programmes p JOIN channels c ON c.tvg_id = p.tvg_id AND c.present = 1
+    FROM programs p JOIN channels c ON c.tvg_id = p.tvg_id AND c.present = 1
     WHERE p.stop > ? AND (p.title LIKE ? ESCAPE '\\' OR p.subtitle LIKE ? ESCAPE '\\')
     ORDER BY p.start, c.number LIMIT 300`).all(now(), like, like);
 });
@@ -75,8 +75,8 @@ route('GET', '/api/channels', (req, q) => {
     AND (name LIKE ? ESCAPE '\\' OR CAST(number AS TEXT) LIKE ? ESCAPE '\\') ${CHANNEL_ORDER} LIMIT 50`).all(like, like);
 });
 
-route('POST', '/api/channels/([^/]+)/favourite', (req, q, body, [id]) => {
-  const result = db.prepare('UPDATE channels SET favourite = ? WHERE id = ?').run(body.favourite ? 1 : 0, decodeURIComponent(id));
+route('POST', '/api/channels/([^/]+)/favorite', (req, q, body, [id]) => {
+  const result = db.prepare('UPDATE channels SET favorite = ? WHERE id = ?').run(body.favorite ? 1 : 0, decodeURIComponent(id));
   if (!result.changes) throw new HttpError(404, 'No such channel.');
   return { ok: true };
 });
@@ -99,9 +99,9 @@ route('POST', '/api/recordings', (req, q, body) => {
   if (![prePad, postPad].every((n) => Number.isInteger(n) && n >= 0 && n <= 240)) throw new HttpError(400, 'Padding must be 0–240 minutes.');
 
   let rec;
-  if (body.programmeId) {
-    const p = db.prepare('SELECT * FROM programmes WHERE id = ?').get(body.programmeId);
-    if (!p) throw new HttpError(404, 'That programme is no longer in the guide. Refresh the page.');
+  if (body.programId) {
+    const p = db.prepare('SELECT * FROM programs WHERE id = ?').get(body.programId);
+    if (!p) throw new HttpError(404, 'That program is no longer in the guide. Refresh the page.');
     rec = { ...p, from_guide: 1 };
   } else {
     const start = Number(body.start);

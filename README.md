@@ -18,7 +18,7 @@ included.
 - **Spoiler-free artwork.** Every recording gets an `.nfo` and a thumbnail made from the guide's
   artwork, or a plain title card. Nothing is ever taken from a frame of the video.
 - **Guide built for big lineups.** It has a group list you can jump through (with a filter),
-  favourites, a search across every channel, and a grid that only draws the rows on screen.
+  favorites, a search across every channel, and a grid that only draws the rows on screen.
 - One-off recordings only. Each one has start and end padding, with defaults you set once.
   You can also record by time on any channel, which helps for channels with no guide data.
 - Warns when a new recording would need more streams than the manager allows. Follows the guide
@@ -86,7 +86,7 @@ Logs rotate at 10 MB × 3 files. The playlist and guide refresh on start-up, eve
 ## 3. Using it
 
 - **Guide.** Pick a group on the left (type in *Find a group* and press Enter to jump), or use the
-  drop-down on a phone. Use **☆** to make a Favourites group. Use **‹ Now ›** and the date to move in time.
+  drop-down on a phone. Use **☆** to make a Favorites group. Use **‹ Now ›** and the date to move in time.
   Click a show to record it. Click a channel name, or *No guide data*, to **record by time**.
 - **Search** finds upcoming shows by title across every channel and group.
 - **Scheduled** lists what's coming and what's recording now. Change padding, cancel, or stop early

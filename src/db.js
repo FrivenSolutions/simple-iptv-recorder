@@ -17,10 +17,10 @@ CREATE TABLE IF NOT EXISTS channels (
   url TEXT,
   tvg_id TEXT,
   sort INTEGER,
-  favourite INTEGER NOT NULL DEFAULT 0,
+  favorite INTEGER NOT NULL DEFAULT 0,
   present INTEGER NOT NULL DEFAULT 1
 );
-CREATE TABLE IF NOT EXISTS programmes (
+CREATE TABLE IF NOT EXISTS programs (
   id INTEGER PRIMARY KEY,
   tvg_id TEXT,
   start INTEGER,
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS programmes (
   episode INTEGER,
   icon TEXT
 );
-CREATE INDEX IF NOT EXISTS programmes_channel ON programmes (tvg_id, start);
+CREATE INDEX IF NOT EXISTS programs_channel ON programs (tvg_id, start);
 CREATE TABLE IF NOT EXISTS recordings (
   id INTEGER PRIMARY KEY,
   channel_id TEXT,
