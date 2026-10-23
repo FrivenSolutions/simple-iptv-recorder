@@ -1,0 +1,8 @@
+.git
+.claude
+config
+recordings
+test
+.env
+node_modules
+*.md

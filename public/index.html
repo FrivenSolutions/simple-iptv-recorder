@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IPTV Recorder</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="dot"></span> IPTV Recorder</div>
+    <nav class="tabs" role="tablist">
+      <button data-tab="guide" class="active">Guide</button>
+      <button data-tab="scheduled">Scheduled <span id="scheduledCount" class="count"></span></button>
+      <button data-tab="recordings">Recordings</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+    <div id="statusPill" class="pill" title="Streams in use"></div>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+
+  <main>
+    <section id="tab-guide" class="tab active">
+      <aside class="groups">
+        <input id="groupFilter" type="search" placeholder="Find a group" aria-label="Find a group">
+        <div id="groupList" class="group-list"></div>
+      </aside>
+      <div class="guide-main">
+        <div class="toolbar">
+          <select id="groupSelect" class="group-select" aria-label="Group"></select>
+          <input id="search" type="search" placeholder="Search shows in every channel" aria-label="Search shows">
+          <div class="timenav">
+            <button id="earlier" title="Earlier">‹</button>
+            <button id="nowBtn">Now</button>
+            <button id="later" title="Later">›</button>
+            <input id="dayPick" type="date" aria-label="Day">
+          </div>
+        </div>
+        <div id="guide" class="guide">
+          <div class="guide-head"><div class="corner" id="groupTitle"></div><div class="ticks" id="ticks"></div></div>
+          <div class="guide-body" id="guideBody"><div id="guideRows" class="guide-rows"></div></div>
+        </div>
+        <div id="results" class="results" hidden></div>
+      </div>
+    </section>
+
+    <section id="tab-scheduled" class="tab page">
+      <div class="page-head">
+        <h1>Scheduled</h1>
+        <button id="manualBtn" class="primary">Record by time</button>
+      </div>
+      <div id="scheduledList"></div>
+    </section>
+
+    <section id="tab-recordings" class="tab page">
+      <div class="page-head">
+        <h1>Recordings</h1>
+        <input id="recFilter" type="search" placeholder="Filter" aria-label="Filter recordings">
+      </div>
+      <div id="recordingList"></div>
+    </section>
+
+    <section id="tab-settings" class="tab page">
+      <h1>Settings</h1>
+      <form id="settingsForm" class="settings">
+        <fieldset>
+          <legend>Padding (default for new recordings)</legend>
+          <label>Start early by <input name="prePadMin" type="number" min="0" max="240"> min</label>
+          <label>Keep going for <input name="postPadMin" type="number" min="0" max="240"> min after the end</label>
+        </fieldset>
+        <fieldset>
+          <legend>Cleanup</legend>
+          <label>Delete recordings after <input name="retentionDays" type="number" min="0" max="3650"> days <small>(0 = keep)</small></label>
+        </fieldset>
+        <fieldset>
+          <legend>Notifications</legend>
+          <label class="wide">ntfy topic URL <input name="ntfyUrl" type="url" placeholder="https://ntfy.sh/my-recorder"></label>
+          <label class="wide">ntfy access token <small>(only for protected topics)</small> <input name="ntfyToken" type="password" autocomplete="off"></label>
+          <label class="wide">Pushbullet access token <input name="pushbulletToken" type="password" autocomplete="off"></label>
+          <label class="check"><input name="notifyOnSuccess" type="checkbox"> Also tell me when a recording finishes fine</label>
+          <p class="hint">Failures, incomplete recordings and guide changes are always sent.</p>
+        </fieldset>
+        <div class="actions">
+          <button class="primary" type="submit">Save</button>
+          <button type="button" id="testNotify">Send a test</button>
+          <span id="settingsMsg" class="msg"></span>
+        </div>
+      </form>
+      <h2>Lineup</h2>
+      <div id="lineupInfo" class="info"></div>
+      <button id="refreshBtn">Refresh playlist and guide now</button>
+    </section>
+  </main>
+
+  <dialog id="dialog">
+    <form method="dialog" id="dialogForm"></form>
+  </dialog>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>

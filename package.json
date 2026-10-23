@@ -1,0 +1,14 @@
+{
+  "name": "simple-iptv-recorder",
+  "version": "0.1.0",
+  "description": "Records channels from Simple IPTV Manager into seekable MP4 files.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""
+  }
+}
