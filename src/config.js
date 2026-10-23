@@ -30,4 +30,5 @@ export const settingDefaults = {
   ntfyToken: env.NTFY_TOKEN || '',
   pushbulletToken: env.PUSHBULLET_TOKEN || '',
   notifyOnSuccess: env.NOTIFY_ON_SUCCESS === 'true',
+  preferLight: env.PREFER_LIGHT === 'true',
 };

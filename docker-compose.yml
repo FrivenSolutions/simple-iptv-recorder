@@ -1,11 +1,11 @@
 # Simple IPTV Recorder. Deploy as a Portainer stack (Repository or Web editor)
-# or with `docker compose up -d --build`. Set the variables in Portainer's
+# or with `docker compose up -d`. Set the variables in Portainer's
 # "Environment variables" section, or in a .env file next to this one
-# (see .env.example).
+# (see .env.example). The image is built by GitHub Actions for Intel and ARM;
+# to build it yourself instead, replace `image:` with `build: .`.
 services:
   recorder:
-    build: .
-    image: simple-iptv-recorder:latest
+    image: ghcr.io/frivensolutions/simple-iptv-recorder:latest
     container_name: simple-iptv-recorder
     restart: unless-stopped
     ports:
@@ -24,6 +24,7 @@ services:
       RETENTION_DAYS: ${RETENTION_DAYS:-0}
       NTFY_URL: ${NTFY_URL:-}
       PUSHBULLET_TOKEN: ${PUSHBULLET_TOKEN:-}
+      PREFER_LIGHT: ${PREFER_LIGHT:-false}
     volumes:
       - ${CONFIG_PATH:-/volume1/docker/simple-iptv-recorder}:/config
       - ${RECORDINGS_PATH:?Set RECORDINGS_PATH to the NAS folder for recordings}:/recordings

@@ -2,11 +2,11 @@
 // then moves scheduled recordings that the guide has rescheduled.
 import zlib from 'node:zlib';
 import { config } from './config.js';
-import { db, now, transaction, updateRecording } from './db.js';
+import { db, getSettings, now, transaction, updateRecording } from './db.js';
 import { notify } from './notify.js';
 import { log } from './log.js';
 
-export const lineupState = { lastRefresh: 0, refreshing: false, error: '', warnings: [] };
+export const lineupState = { lastRefresh: 0, refreshing: false, error: '' };
 
 const ATTR = /([\w-]+)="([^"]*)"/g;
 
@@ -32,6 +32,8 @@ export function parseM3U(text) {
         grp: attrs['group-title'] || 'Ungrouped',
         logo: attrs['tvg-logo'] || '',
         url: line,
+        // The manager's "light" link for this channel, when the output offers one.
+        light_url: attrs['tileiptv-light'] || '',
         tvg_id: attrs['tvg-id'] || '',
       });
       pending = null;
@@ -144,22 +146,12 @@ export async function refreshLineup() {
 
     transaction(() => {
       db.exec('UPDATE channels SET present = 0');
-      const upsert = db.prepare(`INSERT INTO channels (id, number, name, grp, logo, url, tvg_id, sort, present)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-        ON CONFLICT(id) DO UPDATE SET number = excluded.number, name = excluded.name, grp = excluded.grp,
-          logo = excluded.logo, url = excluded.url, tvg_id = excluded.tvg_id, sort = excluded.sort, present = 1`);
-      channels.forEach((c, i) => upsert.run(c.id, c.number, c.name, c.grp, c.logo, c.url, c.tvg_id, i));
+      const upsert = db.prepare(`INSERT INTO channels (id, number, name, grp, logo, url, light_url, tvg_id, sort, present)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ON CONFLICT(id) DO UPDATE SET number = excluded.number, name = excluded.name, grp = excluded.grp, logo = excluded.logo,
+          url = excluded.url, light_url = excluded.light_url, tvg_id = excluded.tvg_id, sort = excluded.sort, present = 1`);
+      channels.forEach((c, i) => upsert.run(c.id, c.number, c.name, c.grp, c.logo, c.url, c.light_url, c.tvg_id, i));
     });
-
-    lineupState.warnings = [];
-    const managerHost = new URL(config.m3uUrl).host;
-    const direct = channels.filter((c) => {
-      try { return new URL(c.url).host !== managerHost; } catch { return true; }
-    }).length;
-    if (direct) {
-      lineupState.warnings.push(`${direct} of ${channels.length} channels link straight to the provider instead of the manager, `
-        + 'so they bypass conversion and connection limits. In the manager, set this output\'s Stream mode to Proxy.');
-    }
 
     let programs = 0;
     if (config.epgUrl) {
@@ -188,6 +180,25 @@ export async function refreshLineup() {
   } finally {
     lineupState.refreshing = false;
   }
+}
+
+// Channels whose recordings would skip the manager: the playlist link goes
+// straight to the provider, and there is no light link to use instead (or
+// light streams are not preferred).
+export function lineupWarnings() {
+  if (!config.m3uUrl) return [];
+  const managerHost = new URL(config.m3uUrl).host;
+  const preferLight = getSettings().preferLight;
+  const channels = db.prepare('SELECT url, light_url FROM channels WHERE present = 1').all();
+  const direct = channels.filter((c) => {
+    if (preferLight && c.light_url) return false;
+    try { return new URL(c.url).host !== managerHost; } catch { return true; }
+  }).length;
+  if (!direct) return [];
+  const hasLight = channels.some((c) => c.light_url);
+  return [`${direct} of ${channels.length} channels link straight to the provider instead of the manager, so recording them `
+    + 'bypasses conversion and connection limits. Set this output\'s Stream mode to Proxy in the manager'
+    + `${hasLight && !preferLight ? ', or turn on "Record the light stream" in Settings' : ''}.`];
 }
 
 // A scheduled show that the guide now lists at a different time (same channel,

@@ -65,6 +65,16 @@ CREATE TABLE IF NOT EXISTS recordings (
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 `);
 
+// Columns added after the first release.
+function addColumn(table, column, definition) {
+  const exists = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+  if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+addColumn('channels', 'light_url', "TEXT NOT NULL DEFAULT ''");
+addColumn('recordings', 'use_light', 'INTEGER NOT NULL DEFAULT 0');
+// Days to keep after it finishes: NULL follows the default in Settings, 0 keeps it forever.
+addColumn('recordings', 'keep_days', 'INTEGER');
+
 export const now = () => Math.floor(Date.now() / 1000);
 
 export function getSettings() {

@@ -57,11 +57,14 @@ until the recording's end time.
 2. **Your user and group IDs.** Over SSH, run `id`. Synology users usually start at `uid=1026`,
    and the `users` group is `gid=100`. The container writes files as this user, so you own them.
 3. **Create the stack.** In Portainer → Stacks → Add stack:
-   - **Repository** (recommended): point it at this repository (push it to GitHub first;
-     for a private repo, add a personal access token). Compose path: `docker-compose.yml`.
-     Portainer builds the image from the `Dockerfile` here.
-   - Without GitHub: copy this folder to the NAS, then over SSH run `sudo docker compose up -d --build`
-     in it, with a `.env` file made from `.env.example`.
+   - **Repository** (recommended): URL `https://github.com/FrivenSolutions/simple-iptv-recorder`,
+     reference `refs/heads/main`, compose path `docker-compose.yml`. Turn on automatic updates
+     if you want Portainer to follow the repository.
+   - **Web editor**: paste `docker-compose.yml`.
+
+   Either way, the image comes ready-made from `ghcr.io/frivensolutions/simple-iptv-recorder:latest`
+   (Intel and ARM). GitHub Actions builds it on every push to `main`. To update, use the stack's
+   **Update** with **Re-pull image** turned on.
 4. **Environment variables** (Portainer's stack page, or `.env`):
 
    | Variable | Example | Notes |
@@ -76,7 +79,8 @@ until the recording's end time.
    | `WEB_PORT` | `8089` | |
 
    Optional: `REFRESH_HOURS` (6), and first-run defaults for `PRE_PADDING_MIN` (2),
-   `POST_PADDING_MIN` (5), `RETENTION_DAYS` (0 = keep), `NTFY_URL`, `PUSHBULLET_TOKEN`.
+   `POST_PADDING_MIN` (5), `RETENTION_DAYS` (0 = keep), `NTFY_URL`, `PUSHBULLET_TOKEN`,
+   `PREFER_LIGHT` (false).
    After the first run, those are changed on the Settings page.
 5. Deploy, then open `http://<nas-ip>:8089`. There's no login: keep it on the LAN.
 
@@ -93,7 +97,15 @@ Logs rotate at 10 MB × 3 files. The playlist and guide refresh on start-up, eve
   (stopping keeps what was recorded so far).
 - **Recordings** lists finished recordings with their status. You can play one in the browser,
   delete it (files included), or **Retry** if the MP4 step failed (the raw parts are kept for that).
-- **Settings** has default padding, delete-after-X-days, and notifications (with a test button).
+- **Keep for**: every recording has its own keep time (Default, Forever, or 1 day to a year).
+  You set it when you record and can change it later on Scheduled or Recordings. *Default* follows
+  the delete-after setting in Settings, and finished recordings show the date they'll be deleted.
+- **Light stream**: when the playlist gives a channel a light link (the manager's converted
+  stream), the record dialog and each scheduled item have a **Record the light stream** box.
+  Settings decides whether that box starts ticked. Light streams count toward the manager's
+  "At most at once" limit.
+- **Settings** has default padding, default delete-after-X-days, the light-stream default, and
+  notifications (with a test button).
 
 If the guide moves a scheduled show (same channel, same title, within 4 hours), the recording
 moves with it and you get a notification. If the show disappears from the guide, it still records
@@ -145,7 +157,8 @@ are always sent. *Done* messages are optional.
 
 ## Troubleshooting
 
-- **Yellow banner about provider links**: set the output's Stream mode to Proxy (section 1).
+- **Yellow banner about provider links**: set the output's Stream mode to Proxy (section 1), or record
+  light streams. Use × to close it; it comes back only if the message changes.
 - **"HTTP 503: the manager is at its stream limit"**: too many streams are open at once,
   including live viewers on the same source. The recorder keeps retrying, and the time lost shows
   up as *incomplete*.

@@ -71,7 +71,14 @@
         </fieldset>
         <fieldset>
           <legend>Cleanup</legend>
-          <label>Delete recordings after <input name="retentionDays" type="number" min="0" max="3650"> days <small>(0 = keep)</small></label>
+          <label>By default, delete recordings after <input name="retentionDays" type="number" min="0" max="3650"> days <small>(0 = keep forever)</small></label>
+          <p class="hint">Each recording can override this with its own "Keep for".</p>
+        </fieldset>
+        <fieldset>
+          <legend>Stream</legend>
+          <label class="check"><input name="preferLight" type="checkbox"> Record the light stream when a channel has one</label>
+          <p class="hint">The light stream is the manager's converted stream for the channel. It counts toward the manager's
+            "At most at once" limit. This is the default for new recordings; each recording can choose for itself.</p>
         </fieldset>
         <fieldset>
           <legend>Notifications</legend>

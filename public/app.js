@@ -223,7 +223,7 @@ $('#guideRows').addEventListener('click', async (e) => {
   if (prog) {
     const ch = state.guide.channels.find((c) => c.id === prog.dataset.chan);
     const p = state.guide.programs[ch.tvg_id].find((x) => x.id === Number(prog.dataset.prog));
-    openProgramDialog(p, { id: ch.id, name: ch.name });
+    openProgramDialog(p, { id: ch.id, name: ch.name, has_light: ch.has_light });
   }
 });
 
@@ -275,7 +275,7 @@ $('#results').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-result]');
   if (!btn) return;
   const p = state.searchResults[Number(btn.dataset.result)];
-  openProgramDialog(p, { id: p.channel_id, name: p.channel_name });
+  openProgramDialog(p, { id: p.channel_id, name: p.channel_name, has_light: p.has_light });
 });
 
 // ---------- dialogs ----------
@@ -315,6 +315,39 @@ async function submitRecording(payload, button) {
   }
 }
 
+const KEEP_CHOICES = [0, 1, 3, 7, 14, 30, 60, 90, 180, 365];
+function keepLabel(days) {
+  return !days ? 'Forever' : days === 1 ? '1 day' : `${days} days`;
+}
+// value null follows the default in Settings.
+function keepSelect(value, attrs = '') {
+  const def = state.settings?.retentionDays || 0;
+  const choices = value != null && !KEEP_CHOICES.includes(value) ? [...KEEP_CHOICES, value].sort((a, b) => a - b) : KEEP_CHOICES;
+  return `<select ${attrs}>
+    <option value="" ${value == null ? 'selected' : ''}>Default (${keepLabel(def).toLowerCase()})</option>
+    ${choices.map((d) => `<option value="${d}" ${value === d ? 'selected' : ''}>${keepLabel(d)}</option>`).join('')}
+  </select>`;
+}
+const readKeep = (select) => (select.value === '' ? null : Number(select.value));
+
+function optionFields(showLight) {
+  const light = state.settings?.preferLight;
+  return `<div class="grid2">
+    <label>Keep for${keepSelect(null, 'name="keepDays"')}</label>
+    <label class="inline" ${showLight ? '' : 'hidden'}><span><input name="useLight" type="checkbox" ${light ? 'checked' : ''}> Record the light stream</span>
+      <small>The manager's converted stream for this channel</small></label>
+  </div>`;
+}
+
+function readOptions() {
+  const light = form.elements.useLight;
+  return {
+    ...readPadding(),
+    keepDays: readKeep(form.elements.keepDays),
+    useLight: light && !light.closest('label').hidden ? light.checked : undefined,
+  };
+}
+
 function readPadding() {
   return { prePad: Number(form.elements.prePad.value), postPad: Number(form.elements.postPad.value) };
 }
@@ -329,7 +362,7 @@ async function openProgramDialog(p, ch) {
     <div class="when">${fmtWhen(p.start, p.stop)} · ${esc(ch.name)}${p.category ? ` · ${esc(p.category)}` : ''}</div>
     ${p.descr ? `<div class="desc">${esc(p.descr)}</div>` : ''}
     ${existing ? `<div><span class="badge ${existing.status}">${existing.status}</span>Starts ${existing.pre_pad} min early, keeps going ${existing.post_pad} min.</div>`
-      : p.stop <= nowSec() ? '<div class="when">This has already ended.</div>' : paddingFields(s.prePadMin, s.postPadMin)}
+      : p.stop <= nowSec() ? '<div class="when">This has already ended.</div>' : paddingFields(s.prePadMin, s.postPadMin) + optionFields(ch.has_light)}
     <div class="problem" hidden></div>
     <div class="actions">
       <button value="cancel" formnovalidate>Close</button>
@@ -337,7 +370,7 @@ async function openProgramDialog(p, ch) {
         : p.stop > nowSec() ? '<button type="button" class="primary" id="dlgRecord">Record</button>' : ''}
     </div>`;
   form.querySelector('#dlgRecord')?.addEventListener('click', (e) => {
-    submitRecording({ channelId: ch.id, programId: p.id, ...readPadding() }, e.currentTarget);
+    submitRecording({ channelId: ch.id, programId: p.id, ...readOptions() }, e.currentTarget);
   });
   form.querySelector('#dlgCancel')?.addEventListener('click', async () => {
     await api('DELETE', `/api/recordings/${existing.id}`);
@@ -366,6 +399,7 @@ async function openManualDialog(ch) {
       <label>End<input name="stop" type="datetime-local" value="${toLocalInput(start + 3 * 3600)}" required></label>
     </div>
     ${paddingFields(s.prePadMin, s.postPadMin)}
+    ${optionFields(ch?.has_light)}
     <div class="problem" hidden></div>
     <div class="actions">
       <button value="cancel" formnovalidate>Close</button>
@@ -383,6 +417,7 @@ async function openManualDialog(ch) {
       const b = e.target.closest('[data-i]');
       if (!b) return;
       chosen = found[Number(b.dataset.i)];
+      form.elements.useLight.closest('label').hidden = !chosen.has_light;
       form.elements.chanSearch.value = chosen.name;
       list.hidden = true;
     };
@@ -399,7 +434,7 @@ async function openManualDialog(ch) {
       title: form.elements.title.value,
       start: fromLocalInput(form.elements.start.value),
       stop: fromLocalInput(form.elements.stop.value),
-      ...readPadding(),
+      ...readOptions(),
     }, e.currentTarget);
   });
   dialog.showModal();
@@ -427,9 +462,11 @@ async function loadScheduled() {
         ${live ? '<button data-act="stop">Stop now</button><button class="danger" data-act="delete">Stop and delete</button>'
           : '<button class="danger" data-act="delete">Cancel</button>'}
       </div>
-      <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.from_guide ? '' : ' · by time'}</div>
+      <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.from_guide ? '' : ' · by time'}${r.use_light && live ? ' · light stream' : ''}</div>
       <div class="meta pad">Start <input type="number" min="0" max="240" value="${r.pre_pad}" data-pad="prePad" ${live ? 'disabled' : ''}> min early,
-        keep going <input type="number" min="0" max="240" value="${r.post_pad}" data-pad="postPad"> min</div>
+        keep going <input type="number" min="0" max="240" value="${r.post_pad}" data-pad="postPad"> min,
+        keep ${keepSelect(r.keep_days, 'data-keep')}</div>
+      ${r.has_light && !live ? `<label class="meta"><input type="checkbox" data-light ${r.use_light ? 'checked' : ''}> Record the light stream</label>` : ''}
       ${note ? `<div class="note warn">${note}</div>` : ''}
     </div>`;
   }).join('') : '<div class="empty-state">Nothing scheduled. Pick a show in the Guide, or record by time.</div>';
@@ -447,7 +484,26 @@ $('#scheduledList').addEventListener('click', async (e) => {
   loadScheduled();
   loadStatus();
 });
+async function changeKeep(e, reload) {
+  const select = e.target.closest('[data-keep]');
+  if (!select) return false;
+  const id = select.closest('[data-id]').dataset.id;
+  await api('PATCH', `/api/recordings/${id}`, { keepDays: readKeep(select) }).catch((err) => alert(err.message));
+  select.blur();
+  reload();
+  return true;
+}
+
 $('#scheduledList').addEventListener('change', async (e) => {
+  if (await changeKeep(e, loadScheduled)) return;
+  const light = e.target.closest('[data-light]');
+  if (light) {
+    const id = light.closest('[data-id]').dataset.id;
+    await api('PATCH', `/api/recordings/${id}`, { useLight: light.checked }).catch((err) => alert(err.message));
+    light.blur();
+    loadScheduled();
+    return;
+  }
   const input = e.target.closest('[data-pad]');
   if (!input) return;
   const id = input.closest('[data-id]').dataset.id;
@@ -480,12 +536,15 @@ function renderRecordings() {
         ${r.status !== 'processing' ? '<button class="danger" data-act="delete">Delete</button>' : ''}
       </div>
       <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.duration ? ` · ${fmtDuration(r.duration)}` : ''}${r.size ? ` · ${fmtSize(r.size)}` : ''}</div>
+      ${['done', 'incomplete'].includes(r.status) ? `<div class="meta pad">Keep ${keepSelect(r.keep_days, 'data-keep')}
+        ${r.delete_after ? `· deletes ${fmtDay(r.delete_after)}` : ''}</div>` : ''}
       ${r.file ? `<div class="meta">${esc(r.file)}</div>` : ''}
       ${r.error ? `<div class="note ${r.status === 'failed' ? 'err' : 'warn'}">${esc(r.error)}</div>` : ''}
     </div>`;
   }).join('') : `<div class="empty-state">${filter ? 'No recordings match.' : 'No recordings yet.'}</div>`;
 }
 $('#recFilter').addEventListener('input', renderRecordings);
+$('#recordingList').addEventListener('change', (e) => changeKeep(e, loadRecordings));
 $('#recordingList').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
@@ -566,8 +625,11 @@ async function loadStatus() {
   pill.textContent = s.recordingNow ? `● Recording ${s.recordingNow} of ${s.maxStreams}` : `${s.channels} channels`;
   pill.classList.toggle('live', s.recordingNow > 0);
   const notes = [...s.warnings, ...(s.error ? [`Lineup refresh failed: ${s.error}`] : [])];
-  $('#banner').hidden = !notes.length;
-  $('#banner').innerHTML = notes.map((n) => `<p>${esc(n)}</p>`).join('');
+  // A closed message stays closed until its text changes.
+  const dismissed = JSON.parse(recall('dismissed') || '[]');
+  const shown = notes.filter((n) => !dismissed.includes(n));
+  $('#banner').hidden = !shown.length;
+  $('#banner').innerHTML = shown.map((n) => `<p><span>${esc(n)}</span><button class="close" data-note="${esc(n)}" title="Close">×</button></p>`).join('');
   renderLineupInfo();
   const upcoming = await api('GET', '/api/recordings?view=upcoming').catch(() => []);
   $('#scheduledCount').textContent = upcoming.length || '';
@@ -587,3 +649,12 @@ await loadStatus();
 loadSettingsData();
 await loadGroups();
 await loadGuide();
+
+$('#banner').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-note]');
+  if (!btn) return;
+  const dismissed = JSON.parse(recall('dismissed') || '[]');
+  remember('dismissed', JSON.stringify([...dismissed, btn.dataset.note].slice(-20)));
+  btn.closest('p').remove();
+  $('#banner').hidden = !$('#banner p');
+});

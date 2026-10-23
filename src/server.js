@@ -4,8 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { db, getRecording, getSettings, now, saveSettings, updateRecording } from './db.js';
-import { lineupState, refreshLineup } from './lineup.js';
-import { activeCount, checkOverlap, deleteRecording, retryFinish, stopRecording } from './recorder.js';
+import { lineupState, lineupWarnings, refreshLineup } from './lineup.js';
+import { activeCount, checkOverlap, deleteRecording, keepDaysOf, retryFinish, stopRecording } from './recorder.js';
 import { notify } from './notify.js';
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -23,7 +23,7 @@ route('GET', '/api/status', () => ({
   lastRefresh: lineupState.lastRefresh,
   refreshing: lineupState.refreshing,
   error: lineupState.error,
-  warnings: lineupState.warnings,
+  warnings: lineupWarnings(),
   channels: db.prepare('SELECT COUNT(*) AS n FROM channels WHERE present = 1').get().n,
   programs: db.prepare('SELECT COUNT(*) AS n FROM programs').get().n,
   recordingNow: activeCount(),
@@ -45,8 +45,8 @@ route('GET', '/api/guide', (req, q) => {
   const end = start + Math.min(Number(q.get('hours')) || 4, 24) * 3600;
   const group = q.get('group') || '';
   const channels = group === FAVORITES
-    ? db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favorite FROM channels WHERE present = 1 AND favorite = 1 ${CHANNEL_ORDER}`).all()
-    : db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favorite FROM channels WHERE present = 1 AND grp = ? ${CHANNEL_ORDER}`).all(group);
+    ? db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favorite, light_url != '' AS has_light FROM channels WHERE present = 1 AND favorite = 1 ${CHANNEL_ORDER}`).all()
+    : db.prepare(`SELECT id, number, name, grp, logo, tvg_id, favorite, light_url != '' AS has_light FROM channels WHERE present = 1 AND grp = ? ${CHANNEL_ORDER}`).all(group);
   const ids = [...new Set(channels.map((c) => c.tvg_id).filter(Boolean))];
   const programs = {};
   const select = db.prepare(`SELECT id, tvg_id, start, stop, title, subtitle, descr, category, season, episode FROM programs
@@ -62,7 +62,7 @@ route('GET', '/api/search', (req, q) => {
   if (text.length < 2) return [];
   const like = `%${text.replace(/[%_]/g, (c) => `\\${c}`)}%`;
   return db.prepare(`SELECT p.id, p.tvg_id, p.start, p.stop, p.title, p.subtitle, p.descr, p.category, p.season, p.episode,
-      c.id AS channel_id, c.name AS channel_name, c.number AS channel_number, c.grp
+      c.id AS channel_id, c.name AS channel_name, c.number AS channel_number, c.grp, c.light_url != '' AS has_light
     FROM programs p JOIN channels c ON c.tvg_id = p.tvg_id AND c.present = 1
     WHERE p.stop > ? AND (p.title LIKE ? ESCAPE '\\' OR p.subtitle LIKE ? ESCAPE '\\')
     ORDER BY p.start, c.number LIMIT 300`).all(now(), like, like);
@@ -71,7 +71,7 @@ route('GET', '/api/search', (req, q) => {
 route('GET', '/api/channels', (req, q) => {
   const text = (q.get('q') || '').trim();
   const like = `%${text.replace(/[%_]/g, (c) => `\\${c}`)}%`;
-  return db.prepare(`SELECT id, number, name, grp FROM channels WHERE present = 1
+  return db.prepare(`SELECT id, number, name, grp, light_url != '' AS has_light FROM channels WHERE present = 1
     AND (name LIKE ? ESCAPE '\\' OR CAST(number AS TEXT) LIKE ? ESCAPE '\\') ${CHANNEL_ORDER} LIMIT 50`).all(like, like);
 });
 
@@ -84,10 +84,18 @@ route('POST', '/api/channels/([^/]+)/favorite', (req, q, body, [id]) => {
 route('GET', '/api/recordings', (req, q) => {
   const upcoming = q.get('view') === 'upcoming';
   return db.prepare(`SELECT id, channel_id, channel_name, title, subtitle, descr, category, start, stop, pre_pad, post_pad,
-      from_guide, guide_note, status, error, reconnects, missing_seconds, file, size, duration, finished
+      from_guide, guide_note, status, error, reconnects, missing_seconds, file, size, duration, finished, keep_days, use_light,
+      (SELECT c.light_url != '' FROM channels c WHERE c.id = recordings.channel_id) AS has_light
     FROM recordings WHERE status ${upcoming ? "IN ('scheduled', 'recording')" : "NOT IN ('scheduled', 'recording')"}
     ORDER BY start ${upcoming ? 'ASC' : 'DESC'}`).all()
-    .map((r) => ({ ...r, file: r.file ? path.relative(config.recordingsDir, r.file) : null }));
+    .map((r) => {
+      const keep = keepDaysOf(r);
+      return {
+        ...r,
+        file: r.file ? path.relative(config.recordingsDir, r.file) : null,
+        delete_after: keep && r.finished ? r.finished + keep * 86400 : null,
+      };
+    });
 });
 
 route('POST', '/api/recordings', (req, q, body) => {
@@ -97,6 +105,9 @@ route('POST', '/api/recordings', (req, q, body) => {
   const prePad = body.prePad ?? settings.prePadMin;
   const postPad = body.postPad ?? settings.postPadMin;
   if (![prePad, postPad].every((n) => Number.isInteger(n) && n >= 0 && n <= 240)) throw new HttpError(400, 'Padding must be 0–240 minutes.');
+
+  const keepDays = readKeepDays(body.keepDays);
+  const useLight = Boolean(channel.light_url) && (body.useLight ?? settings.preferLight);
 
   let rec;
   if (body.programId) {
@@ -122,18 +133,27 @@ route('POST', '/api/recordings', (req, q, body) => {
   }
 
   const result = db.prepare(`INSERT INTO recordings (channel_id, channel_name, tvg_id, title, subtitle, descr, category, season, episode, icon,
-      start, stop, pre_pad, post_pad, from_guide, status, created)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)`).run(
+      start, stop, pre_pad, post_pad, from_guide, keep_days, use_light, status, created)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)`).run(
     channel.id, channel.name, rec.tvg_id || '', rec.title, rec.subtitle || '', rec.descr || '', rec.category || '',
-    rec.season ?? null, rec.episode ?? null, rec.icon || '', rec.start, rec.stop, prePad, postPad, rec.from_guide, now());
+    rec.season ?? null, rec.episode ?? null, rec.icon || '', rec.start, rec.stop, prePad, postPad, rec.from_guide, keepDays, useLight ? 1 : 0, now());
   return { id: Number(result.lastInsertRowid) };
 });
 
 route('PATCH', '/api/recordings/(\\d+)', (req, q, body, [id]) => {
   const rec = getRecording(Number(id));
   if (!rec) throw new HttpError(404, 'No such recording.');
-  if (!['scheduled', 'recording'].includes(rec.status)) throw new HttpError(400, 'Only upcoming recordings can be changed.');
   const changes = {};
+  // How long to keep it can change at any time; the rest only before it is done.
+  if (body.keepDays !== undefined) changes.keep_days = readKeepDays(body.keepDays);
+  const upcoming = ['scheduled', 'recording'].includes(rec.status);
+  if (!upcoming && (body.prePad !== undefined || body.postPad !== undefined || body.useLight !== undefined)) {
+    throw new HttpError(400, 'Only upcoming recordings can change padding or stream.');
+  }
+  if (body.useLight !== undefined) {
+    if (rec.status !== 'scheduled') throw new HttpError(400, 'The stream can only change before the recording starts.');
+    changes.use_light = body.useLight ? 1 : 0;
+  }
   for (const [key, field] of [['prePad', 'pre_pad'], ['postPad', 'post_pad']]) {
     if (body[key] === undefined) continue;
     if (!Number.isInteger(body[key]) || body[key] < 0 || body[key] > 240) throw new HttpError(400, 'Padding must be 0–240 minutes.');
@@ -171,6 +191,14 @@ route('POST', '/api/refresh', () => {
   refreshLineup();
   return { ok: true };
 });
+
+// null = follow the default in Settings, 0 = keep forever, otherwise days.
+function readKeepDays(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const days = Number(value);
+  if (!Number.isInteger(days) || days < 0 || days > 3650) throw new HttpError(400, 'Keep for must be 0–3650 days.');
+  return days;
+}
 
 async function readBody(req) {
   let size = 0;

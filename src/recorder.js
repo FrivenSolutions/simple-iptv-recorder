@@ -68,7 +68,8 @@ async function record(rec, { resumed = false } = {}) {
   updateRecording(rec.id, { status: 'recording', error: null });
   log(`Recording ${resumed ? 'resumed' : 'started'}: #${rec.id} ${rec.title} on ${rec.channel_name}`);
 
-  const channel = db.prepare('SELECT url FROM channels WHERE id = ?').get(rec.channel_id);
+  const row = db.prepare('SELECT url, light_url FROM channels WHERE id = ?').get(rec.channel_id);
+  const channel = row && { url: rec.use_light && row.light_url ? row.light_url : row.url };
   const end = () => windowEnd(getRecording(rec.id) || rec);
 
   while (channel && !job.stop && now() < end()) {
@@ -229,11 +230,16 @@ function removeEmptyFolders(dir) {
   }
 }
 
+// Each recording keeps its own number of days, or follows the default in Settings.
+export function keepDaysOf(rec) {
+  return rec.keep_days ?? getSettings().retentionDays;
+}
+
 function applyRetention() {
-  const days = getSettings().retentionDays;
-  if (!days) return;
-  const old = db.prepare("SELECT id, title FROM recordings WHERE status IN ('done', 'incomplete') AND finished < ?").all(now() - days * 86400);
-  for (const rec of old) {
+  const finished = db.prepare("SELECT id, title, keep_days, finished FROM recordings WHERE status IN ('done', 'incomplete')").all();
+  for (const rec of finished) {
+    const days = keepDaysOf(rec);
+    if (!days || rec.finished >= now() - days * 86400) continue;
     deleteRecording(rec.id);
     log(`Deleted after ${days} days: #${rec.id} ${rec.title}`);
   }

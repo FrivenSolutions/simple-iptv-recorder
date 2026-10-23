@@ -66,7 +66,10 @@ small, .hint { color: var(--muted); }
 .pill { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .pill.live { color: var(--rec); font-weight: 600; }
 .banner { background: color-mix(in srgb, var(--warn) 16%, var(--panel)); color: var(--text); padding: 8px 16px; border-bottom: 1px solid var(--line); }
-.banner p { margin: 2px 0; }
+.banner p { margin: 2px 0; display: flex; gap: 12px; align-items: flex-start; }
+.banner p span { flex: 1; }
+.banner .close { background: none; border: none; font-size: 18px; line-height: 1; padding: 0 4px; color: var(--muted); }
+.banner .close:hover { color: var(--text); }
 
 main { flex: 1; min-height: 0; display: flex; }
 .tab { display: none; flex: 1; min-height: 0; }
@@ -166,7 +169,9 @@ dialog .when { color: var(--muted); }
 dialog .desc { max-height: 9em; overflow-y: auto; }
 dialog .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-dialog label input { color: var(--text); }
+dialog label input, dialog label select { color: var(--text); }
+dialog label.inline span { display: flex; align-items: center; gap: 6px; color: var(--text); padding-top: 22px; }
+.item .pad select { padding: 3px 6px; }
 dialog .actions { justify-content: flex-end; margin-top: 6px; }
 dialog .problem { color: var(--rec); }
 dialog .problem ul { margin: 4px 0 0; padding-left: 18px; color: var(--text); }
