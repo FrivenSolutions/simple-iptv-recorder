@@ -63,3 +63,9 @@ test('names files the way Jellyfin and Plex expect', () => {
   assert.equal(movie.base, 'Jackie Brown (2026)');
   assert.equal(cleanName('a/b:c?'), 'a b c');
 });
+
+test('finds the guide next to the playlist', async () => {
+  const { guideUrlFor } = await import('../src/config.js');
+  assert.equal(guideUrlFor('http://192.168.1.15:8080/o/tok/playlist.m3u'), 'http://192.168.1.15:8080/o/tok/epg.xml');
+  assert.equal(guideUrlFor('http://x/other.m3u'), '');
+});

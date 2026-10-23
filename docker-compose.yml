@@ -1,30 +1,20 @@
-# Simple IPTV Recorder. Deploy as a Portainer stack (Repository or Web editor)
-# or with `docker compose up -d`. Set the variables in Portainer's
-# "Environment variables" section, or in a .env file next to this one
-# (see .env.example). The image is built by GitHub Actions for Intel and ARM;
-# to build it yourself instead, replace `image:` with `build: .`.
+# Simple IPTV Recorder. Deploy as a Portainer stack, or with `docker compose up -d`.
+# Set M3U_URL and RECORDINGS_PATH in Portainer's "Environment variables" (or a
+# .env file next to this one). Everything else is on the web page's Settings.
 services:
   recorder:
     image: ghcr.io/frivensolutions/simple-iptv-recorder:latest
     container_name: simple-iptv-recorder
     restart: unless-stopped
     ports:
-      - "${WEB_PORT:-8089}:8089"
+      - "8089:8089"
     environment:
+      # The manager output's playlist link; its guide (epg.xml) is found next to it.
       M3U_URL: ${M3U_URL:?Set M3U_URL to the manager output's playlist.m3u link}
-      EPG_URL: ${EPG_URL:-}
       TZ: ${TZ:-America/Chicago}
+      # Your Synology user and group (run `id` over SSH), so you own the files.
       PUID: ${PUID:-1026}
       PGID: ${PGID:-100}
-      MAX_STREAMS: ${MAX_STREAMS:-4}
-      REFRESH_HOURS: ${REFRESH_HOURS:-6}
-      # First-run defaults; change them later on the Settings page.
-      PRE_PADDING_MIN: ${PRE_PADDING_MIN:-2}
-      POST_PADDING_MIN: ${POST_PADDING_MIN:-5}
-      RETENTION_DAYS: ${RETENTION_DAYS:-0}
-      NTFY_URL: ${NTFY_URL:-}
-      PUSHBULLET_TOKEN: ${PUSHBULLET_TOKEN:-}
-      PREFER_LIGHT: ${PREFER_LIGHT:-false}
     volumes:
       - ${CONFIG_PATH:-/volume1/docker/simple-iptv-recorder}:/config
       - ${RECORDINGS_PATH:?Set RECORDINGS_PATH to the NAS folder for recordings}:/recordings

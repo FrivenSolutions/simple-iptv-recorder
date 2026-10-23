@@ -8,14 +8,19 @@ const num = (value, fallback) => {
   return value !== undefined && value !== '' && Number.isFinite(n) ? n : fallback;
 };
 
+// The manager serves an output's guide next to its playlist:
+// …/o/<token>/playlist.m3u → …/o/<token>/epg.xml
+export function guideUrlFor(m3uUrl) {
+  const playlist = /playlist\.m3u8?(?=\?|$)/;
+  return m3uUrl && playlist.test(m3uUrl) ? m3uUrl.replace(playlist, 'epg.xml') : '';
+}
+
 export const config = {
   m3uUrl: env.M3U_URL || '',
-  epgUrl: env.EPG_URL || '',
+  epgUrl: env.EPG_URL || guideUrlFor(env.M3U_URL),
   dataDir: env.DATA_DIR || '/config',
   recordingsDir: env.RECORDINGS_DIR || '/recordings',
   port: num(env.PORT, 8089),
-  maxStreams: num(env.MAX_STREAMS, 4),
-  refreshHours: num(env.REFRESH_HOURS, 6),
   timeZone: env.TZ || 'UTC',
   ffmpeg: env.FFMPEG || 'ffmpeg',
   ffprobe: env.FFPROBE || 'ffprobe',
@@ -23,6 +28,8 @@ export const config = {
 };
 
 export const settingDefaults = {
+  maxStreams: num(env.MAX_STREAMS, 4),
+  refreshHours: num(env.REFRESH_HOURS, 6),
   prePadMin: num(env.PRE_PADDING_MIN, 2),
   postPadMin: num(env.POST_PADDING_MIN, 5),
   retentionDays: num(env.RETENTION_DAYS, 0),

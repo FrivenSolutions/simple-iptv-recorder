@@ -39,9 +39,10 @@ function tick() {
       updateRecording(rec.id, { status: 'failed', error: 'Missed: the recorder was not running at the time.', finished: t });
       notify('Recording missed', `${rec.title} on ${rec.channel_name} was missed because the recorder was not running.`);
     } else if (!jobs.has(rec.id)) {
-      if (jobs.size >= config.maxStreams) {
+      const limit = getSettings().maxStreams;
+      if (jobs.size >= limit) {
         notify('Too many recordings at once', `${rec.title} is starting while ${jobs.size} other recordings are running `
-          + `(limit ${config.maxStreams}). The manager may refuse it until a stream frees up.`);
+          + `(limit ${limit}). The manager may refuse it until a stream frees up.`);
       }
       record(rec);
     }
@@ -259,5 +260,6 @@ export function checkOverlap(start, end, excludeId = 0) {
   let current = 1;
   let peak = 1;
   for (const [, delta] of events) peak = Math.max(peak, (current += delta));
-  return { over: peak > config.maxStreams, peak, limit: config.maxStreams, overlapping: others };
+  const limit = getSettings().maxStreams;
+  return { over: peak > limit, peak, limit, overlapping: others };
 }

@@ -89,7 +89,8 @@ export function saveSettings(changes) {
   const set = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
   for (const [key, value] of Object.entries(changes)) {
     if (!(key in settingDefaults)) continue;
-    const typed = typeof settingDefaults[key] === 'number' ? Math.max(0, Number(value) || 0)
+    const atLeast = key === 'maxStreams' || key === 'refreshHours' ? 1 : 0;
+    const typed = typeof settingDefaults[key] === 'number' ? Math.max(atLeast, Number(value) || 0)
       : typeof settingDefaults[key] === 'boolean' ? Boolean(value) : String(value ?? '').trim();
     set.run(key, JSON.stringify(typed));
   }

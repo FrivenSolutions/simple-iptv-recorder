@@ -39,11 +39,13 @@ In Simple IPTV Manager, create a dedicated output for recording, e.g. **Recorder
    recorder shows a yellow banner when the playlist links don't point at the manager.
 3. **Convert for playback: Only channels that need it.** H.264/H.265 + AAC pass through untouched.
    MPEG-2 or Dolby/MPEG audio (the HDHomeRun) arrive as H.264 + AAC. Either way, the MP4 plays everywhere.
-4. Open **Connect your apps** and copy the **M3U** and **XMLTV** links:
-   `http://192.168.1.15:8080/o/<token>/playlist.m3u` and `…/epg.xml`.
+4. Open **Connect your apps** and copy the **M3U** link:
+   `http://192.168.1.15:8080/o/<token>/playlist.m3u`. The recorder finds the guide next to it
+   (`…/epg.xml`).
 
-Set the recorder's `MAX_STREAMS` to the manager's limit. Use Settings → Light streams →
-"At most at once" (default 4), or the provider's connection count, whichever is lower. The manager
+After installing, set **Record at most … channels at once** (recorder's Settings page) to the
+manager's limit. Use the manager's Settings → Light streams → "At most at once" (default 4), or the
+provider's connection count, whichever is lower. The manager
 still has the final say: when it answers *503 busy*, the recorder keeps retrying every 10 seconds
 until the recording's end time.
 
@@ -65,27 +67,21 @@ until the recording's end time.
    Either way, the image comes ready-made from `ghcr.io/frivensolutions/simple-iptv-recorder:latest`
    (Intel and ARM). GitHub Actions builds it on every push to `main`. To update, use the stack's
    **Update** with **Re-pull image** turned on.
-4. **Environment variables** (Portainer's stack page, or `.env`):
+4. **Environment variables** (Portainer's stack page, or `.env`). Only two are required:
 
-   | Variable | Example | Notes |
-   |---|---|---|
-   | `M3U_URL` | `http://192.168.1.15:8080/o/<token>/playlist.m3u` | required |
-   | `EPG_URL` | `http://192.168.1.15:8080/o/<token>/epg.xml` | `epg.xml.gz` works too |
-   | `RECORDINGS_PATH` | `/volume1/media/Recordings` | required |
-   | `CONFIG_PATH` | `/volume1/docker/simple-iptv-recorder` | |
-   | `TZ` | `America/Chicago` | used for file names and notifications |
-   | `PUID` / `PGID` | `1026` / `100` | from step 2 |
-   | `MAX_STREAMS` | `4` | the manager's limit |
-   | `WEB_PORT` | `8089` | |
+   | Variable | Example |
+   |---|---|
+   | `M3U_URL` | `http://192.168.1.15:8080/o/<token>/playlist.m3u` |
+   | `RECORDINGS_PATH` | `/volume1/media/Recordings` |
 
-   Optional: `REFRESH_HOURS` (6), and first-run defaults for `PRE_PADDING_MIN` (2),
-   `POST_PADDING_MIN` (5), `RETENTION_DAYS` (0 = keep), `NTFY_URL`, `PUSHBULLET_TOKEN`,
-   `PREFER_LIGHT` (false).
-   After the first run, those are changed on the Settings page.
+   Optional: `TZ` (America/Chicago), `PUID`/`PGID` (1026/100, from step 2), `CONFIG_PATH`
+   (/volume1/docker/simple-iptv-recorder). Everything else (stream limit, padding, cleanup,
+   light streams, notifications, refresh interval) is on the web page's Settings.
 5. Deploy, then open `http://<nas-ip>:8089`. There's no login: keep it on the LAN.
 
-Logs rotate at 10 MB × 3 files. The playlist and guide refresh on start-up, every
-`REFRESH_HOURS`, and when you press **Refresh** on the Settings page.
+Logs rotate at 10 MB × 3 files. The playlist and guide refresh on start-up, every few
+hours (6 by default, set in Settings), and when you press **Refresh** on the Settings page.
+The web page is on port 8089; to use another, change the left side of `8089:8089` in the compose file.
 
 ## 3. Using it
 
@@ -104,7 +100,7 @@ Logs rotate at 10 MB × 3 files. The playlist and guide refresh on start-up, eve
   stream), the record dialog and each scheduled item have a **Record the light stream** box.
   Settings decides whether that box starts ticked. Light streams count toward the manager's
   "At most at once" limit.
-- **Settings** has default padding, default delete-after-X-days, the light-stream default, and
+- **Settings** has the stream limit, the refresh interval, default padding, default delete-after-X-days, the light-stream default, and
   notifications (with a test button).
 
 If the guide moves a scheduled show (same channel, same title, within 4 hours), the recording
@@ -174,7 +170,7 @@ npm test
 ```
 
 ```bash
-M3U_URL=http://… EPG_URL=http://… DATA_DIR=./config RECORDINGS_DIR=./recordings npm start
+M3U_URL=http://… DATA_DIR=./config RECORDINGS_DIR=./recordings npm start
 ```
 
 Needs Node.js 22.13+ (it uses the built-in `node:sqlite`) and `ffmpeg`/`ffprobe` on the PATH.

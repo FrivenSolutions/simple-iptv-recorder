@@ -27,7 +27,7 @@ route('GET', '/api/status', () => ({
   channels: db.prepare('SELECT COUNT(*) AS n FROM channels WHERE present = 1').get().n,
   programs: db.prepare('SELECT COUNT(*) AS n FROM programs').get().n,
   recordingNow: activeCount(),
-  maxStreams: config.maxStreams,
+  maxStreams: getSettings().maxStreams,
   timeZone: config.timeZone,
 }));
 

@@ -65,6 +65,12 @@
       <h1>Settings</h1>
       <form id="settingsForm" class="settings">
         <fieldset>
+          <legend>Manager</legend>
+          <label>Record at most <input name="maxStreams" type="number" min="1" max="50"> channels at once
+            <small>(the manager's "At most at once", or the provider's connection limit if lower)</small></label>
+          <label>Reload the playlist and guide every <input name="refreshHours" type="number" min="1" max="168"> hours</label>
+        </fieldset>
+        <fieldset>
           <legend>Padding (default for new recordings)</legend>
           <label>Start early by <input name="prePadMin" type="number" min="0" max="240"> min</label>
           <label>Keep going for <input name="postPadMin" type="number" min="0" max="240"> min after the end</label>
