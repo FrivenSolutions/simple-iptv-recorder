@@ -43,6 +43,8 @@ const fmtDay = (t) => {
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 };
 const fmtWhen = (start, stop) => `${fmtDay(start)} ${fmtTime(start)}–${fmtTime(stop)}`;
+// The actual recording window, padding included.
+const fmtWindow = (r) => `${fmtTime(r.start - r.pre_pad * 60)}–${fmtTime(r.stop + r.post_pad * 60)}`;
 const fmtSize = (b) => (!b ? '' : b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
 const fmtDuration = (s) => {
   if (!s) return '';
@@ -470,7 +472,7 @@ async function loadScheduled() {
         ${live ? '<button class="primary" data-act="stop">Stop and save</button><button class="danger" data-act="delete">Stop and delete</button>'
           : '<button class="danger" data-act="delete">Cancel</button>'}
       </div>
-      <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.from_guide ? '' : ' · by time'}${r.use_light && live ? ' · light stream' : ''}</div>
+      <div class="meta">${fmtWhen(r.start, r.stop)} · records ${fmtWindow(r)} · ${esc(r.channel_name)}${r.from_guide ? '' : ' · by time'}${r.use_light && live ? ' · light stream' : ''}</div>
       <div class="meta pad">Start <input type="number" min="0" max="240" value="${r.pre_pad}" data-pad="prePad" ${live ? 'disabled' : ''}> min early,
         keep going <input type="number" min="0" max="240" value="${r.post_pad}" data-pad="postPad"> min,
         keep ${keepSelect(r.keep_days, 'data-keep')}</div>
@@ -556,7 +558,7 @@ function renderRecordings() {
         ${r.status === 'failed' && r.error?.startsWith('Could not make') ? '<button data-act="retry">Retry</button>' : ''}
         ${r.status !== 'processing' ? '<button class="danger" data-act="delete">Delete</button>' : ''}
       </div>
-      <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.duration ? ` · ${fmtDuration(r.duration)}` : ''}${r.size ? ` · ${fmtSize(r.size)}` : ''}${r.codecs ? ` · ${esc(r.codecs)}` : ''}</div>
+      <div class="meta">${fmtWhen(r.start, r.stop)} · recorded ${fmtWindow(r)} (${r.pre_pad} min early, ${r.post_pad} after) · ${esc(r.channel_name)}${r.duration ? ` · ${fmtDuration(r.duration)}` : ''}${r.size ? ` · ${fmtSize(r.size)}` : ''}${r.codecs ? ` · ${esc(r.codecs)}` : ''}</div>
       ${['done', 'incomplete'].includes(r.status) ? `<div class="meta pad">Keep ${keepSelect(r.keep_days, 'data-keep')}
         ${r.delete_after ? `· deletes ${fmtDay(r.delete_after)}` : ''}</div>` : ''}
       ${r.file ? `<div class="meta">${esc(r.file)}</div>` : ''}
@@ -637,11 +639,31 @@ $('#testNotify').addEventListener('click', async () => {
     $('#settingsMsg').textContent = err.message;
   }
 });
-$('#refreshBtn').addEventListener('click', async () => {
-  await api('POST', '/api/refresh');
-  $('#lineupInfo').textContent = 'Refreshing…';
-  setTimeout(loadStatus, 4000);
-});
+// Reloads the playlist and guide from the manager, then redraws everything once it's done.
+async function refreshNow() {
+  const buttons = [$('#topRefresh'), $('#refreshBtn')];
+  if (buttons[0].disabled) return;
+  const before = state.status?.lastRefresh;
+  for (const b of buttons) { b.disabled = true; b.dataset.label ??= b.textContent; b.textContent = 'Refreshing…'; }
+  try {
+    await api('POST', '/api/refresh');
+    for (let waited = 0; waited < 180_000; waited += 1500) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const s = await api('GET', '/api/status');
+      if (!s.refreshing) {
+        if (s.lastRefresh === before && s.error) alert(`Refresh failed: ${s.error}`);
+        break;
+      }
+    }
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    await loadStatus();
+    for (const b of buttons) { b.disabled = false; b.textContent = b.dataset.label; }
+  }
+}
+$('#refreshBtn').addEventListener('click', refreshNow);
+$('#topRefresh').addEventListener('click', refreshNow);
 
 function renderLineupInfo() {
   const s = state.status;

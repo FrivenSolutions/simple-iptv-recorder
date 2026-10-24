@@ -80,7 +80,7 @@ until the recording's end time.
 5. Deploy, then open `http://<nas-ip>:8089`. There's no login: keep it on the LAN.
 
 Logs rotate at 10 MB × 3 files. The playlist and guide refresh on start-up, every few
-hours (6 by default, set in Settings), and when you press **Refresh** on the Settings page.
+hours (6 by default, set in Settings), and when you press **↻ Refresh** at the top of the page.
 The web page is on port 8089; to use another, change the left side of `8089:8089` in the compose file.
 
 ## 3. Using it

@@ -65,6 +65,8 @@ small, .hint { color: var(--muted); }
 .count:not(:empty) { background: var(--accent); color: var(--accent-text); border-radius: 9px; padding: 0 6px; font-size: 12px; margin-left: 2px; }
 .pill { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .pill.live { color: var(--rec); font-weight: 600; }
+.refresh { font-size: 12px; padding: 4px 10px; white-space: nowrap; }
+.refresh:disabled { opacity: 0.6; cursor: default; }
 .banner { background: color-mix(in srgb, var(--warn) 16%, var(--panel)); color: var(--text); padding: 8px 16px; border-bottom: 1px solid var(--line); }
 .banner p { margin: 2px 0; display: flex; gap: 12px; align-items: flex-start; }
 .banner p span { flex: 1; }
