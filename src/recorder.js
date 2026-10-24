@@ -17,7 +17,6 @@ const INCOMPLETE_AFTER_SECONDS = 60;
 export const activeCount = () => jobs.size;
 const windowEnd = (rec) => rec.stop + rec.post_pad * 60;
 const windowStart = (rec) => rec.start - rec.pre_pad * 60;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function startScheduler() {
   // Recordings that were running when the container stopped: carry on, or finish them.
@@ -126,7 +125,12 @@ async function record(rec, { resumed = false } = {}) {
     if (gapStart === null) gapStart = now();
     log(`Recording #${rec.id}: ${lastError}; reconnecting.`);
     updateRecording(rec.id, { reconnects, missing_seconds: missing, error: `Reconnecting: ${lastError}` });
-    await sleep(Math.min(retryMs, Math.max(0, end() - now()) * 1000));
+    // Wait before reconnecting, but wake at once if the recording is stopped meanwhile.
+    await new Promise((resolve) => {
+      job.wake = resolve;
+      setTimeout(resolve, Math.min(retryMs, Math.max(0, end() - now()) * 1000));
+    });
+    job.wake = null;
   }
 
   if (gapStart !== null && !job.stop) missing += Math.max(0, Math.min(now(), end()) - gapStart);
@@ -181,7 +185,14 @@ async function finishOne(id) {
     if (incomplete) notify('Recording incomplete', `${rec.title} on ${rec.channel_name} is missing about ${minutes} min (${rec.reconnects} reconnects).`);
     else notify('Recording done', `${rec.title} on ${rec.channel_name} is ready.`, { success: true });
   } catch (err) {
-    updateRecording(id, { status: 'failed', error: `Could not make the MP4: ${err.message}`, finished: now() });
+    // A few hundred KB is under a second of video: there may be no complete picture to keep.
+    const bytes = listParts(id).reduce((sum, f) => sum + fs.statSync(f).size, 0);
+    if (bytes < 2_000_000) {
+      updateRecording(id, { status: 'failed', error: 'Too little was recorded to make a video (under a second).', finished: now() });
+      notify('Recording failed', `${rec.title} on ${rec.channel_name}: too little was recorded to make a video.`);
+      return;
+    }
+    updateRecording(id, { status: 'failed', error: `Could not make the MP4: ${err.message.replace(/[w+ @ [0-9a-fx]+] /gi, '').replace(/s+/g, ' ')}`, finished: now() });
     notify('Recording failed', `${rec.title} on ${rec.channel_name}: could not make the MP4 (${err.message}). The raw parts were kept; use Retry.`);
   }
 }
@@ -195,10 +206,19 @@ export function retryFinish(id) {
 }
 
 export function stopRecording(id) {
+  const rec = getRecording(id);
+  if (!rec || rec.status !== 'recording') return false;
+  // Shown as "making MP4" straight away; the recording loop winds down in the background.
+  updateRecording(id, { status: 'processing' });
   const job = jobs.get(id);
-  if (!job) return false;
-  job.stop = true;
-  job.controller?.abort(new Error('finished'));
+  if (job) {
+    job.stop = true;
+    job.controller?.abort(new Error('finished'));
+    job.wake?.();
+  } else {
+    // Marked as recording but nothing is running it (e.g. after a restart): finish what's there.
+    queueFinish(id);
+  }
   return true;
 }
 
@@ -210,6 +230,7 @@ export function deleteRecording(id) {
     job.stop = true;
     job.discard = true;
     job.controller?.abort(new Error('finished'));
+    job.wake?.();
   } else {
     fs.rmSync(workDirFor(id), { recursive: true, force: true });
   }

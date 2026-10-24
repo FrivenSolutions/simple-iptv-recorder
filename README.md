@@ -134,7 +134,8 @@ in separate library types.
 
 **Custom names.** Settings → File names takes a format instead, e.g.
 `{title}/{date} {time} {title} ({channel})`. A `/` makes folders, and the page shows a live example.
-Placeholders: `{title}`, `{subtitle}`, `{channel}`, `{number}`, `{date}` (2026-10-24), `{time}` (1930),
+Placeholders: `{type}` (`Movies` or `TV`, decided by the guide category the same way as automatic
+naming, e.g. `{type}/{title}/{date} {title}`), `{title}`, `{subtitle}`, `{channel}`, `{number}`, `{date}` (2026-10-24), `{time}` (1930),
 `{year}`, `{month}`, `{day}`, `{se}` (S01E02), `{season}`, `{episode}`, `{category}`, `{id}`. A placeholder
 that's blank for a recording drops out along with its separator, so `{title} - {subtitle}` never
 ends in " - ". Custom names still get an `.nfo` and thumbnails, but no `tvshow.nfo` or movie

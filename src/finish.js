@@ -62,6 +62,8 @@ export async function finishRecording(rec) {
   await run(config.ffmpeg, [
     '-hide_banner', '-loglevel', 'error', '-y',
     '-fflags', '+genpts+discardcorrupt',
+    // Look further into the stream for the picture size: a part can start between keyframes.
+    '-analyzeduration', '30M', '-probesize', '100M',
     ...input,
     '-map', '0:v:0?', '-map', '0:a?', '-dn', '-sn',
     '-c', 'copy',

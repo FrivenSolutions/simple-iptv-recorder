@@ -80,4 +80,6 @@ test('fills in a custom file name format', async () => {
   assert.equal(rel(formatName('Sports/{year}/{title} [{subtitle}]', rec)), path.join('Sports', '2026', 'NFL Bears @ Packers'));
   assert.equal(rel(formatName('{title} {se}', { ...rec, season: 3, episode: 4 })), 'NFL Bears @ Packers S03E04');
   assert.equal(rel(formatName('../{title}', rec)), 'NFL Bears @ Packers');
+  assert.equal(rel(formatName('{type}/{title}', rec)), path.join('TV', 'NFL Bears @ Packers'));
+  assert.equal(rel(formatName('{type}/{title}', { ...rec, category: 'Movie' })), path.join('Movies', 'NFL Bears @ Packers'));
 });

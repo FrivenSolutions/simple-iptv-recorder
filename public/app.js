@@ -375,7 +375,7 @@ async function openProgramDialog(p, ch) {
     submitRecording({ channelId: ch.id, programId: p.id, ...readOptions() }, e.currentTarget);
   });
   form.querySelector('#dlgStop')?.addEventListener('click', async () => {
-    await api('POST', `/api/recordings/${existing.id}/stop`);
+    await api('POST', `/api/recordings/${existing.id}/stop`).catch((err) => alert(err.message));
     dialog.close();
     refreshAfterChange();
   });
@@ -484,10 +484,14 @@ $('#scheduledList').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
   const id = btn.closest('[data-id]').dataset.id;
-  if (btn.dataset.act === 'stop') await api('POST', `/api/recordings/${id}/stop`);
-  if (btn.dataset.act === 'delete') {
-    if (btn.textContent.includes('delete') && !confirm('Stop this recording and delete what was recorded so far?')) return;
-    await api('DELETE', `/api/recordings/${id}`);
+  try {
+    if (btn.dataset.act === 'stop') await api('POST', `/api/recordings/${id}/stop`);
+    if (btn.dataset.act === 'delete') {
+      if (btn.textContent.includes('delete') && !confirm('Stop this recording and delete what was recorded so far?')) return;
+      await api('DELETE', `/api/recordings/${id}`);
+    }
+  } catch (err) {
+    alert(err.message);
   }
   loadScheduled();
   loadStatus();

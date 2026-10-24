@@ -37,6 +37,7 @@ const pad = (n) => String(n).padStart(2, '0');
 
 // The placeholders a custom format can use, with what each one means.
 export const TOKENS = {
+  type: 'Movies or TV, from the guide category (like automatic naming)',
   title: 'Show or movie title',
   subtitle: 'Episode title (blank if none)',
   channel: 'Channel name',
@@ -58,6 +59,7 @@ function tokenValues(rec) {
   const number = rec.channel_number ?? db.prepare('SELECT number FROM channels WHERE id = ?').get(rec.channel_id)?.number;
   const hasEpisode = rec.season && rec.episode;
   return {
+    type: isMovie(rec) ? 'Movies' : 'TV',
     title: rec.title, subtitle: rec.subtitle, channel: rec.channel_name, number: number ?? '',
     date, time, year, month, day,
     se: hasEpisode ? `S${pad(rec.season)}E${pad(rec.episode)}` : '',
