@@ -21,7 +21,7 @@ const windowStart = (rec) => rec.start - rec.pre_pad * 60;
 export function startScheduler() {
   // Recordings that were running when the container stopped: carry on, or finish them.
   for (const rec of db.prepare("SELECT * FROM recordings WHERE status IN ('recording', 'processing')").all()) {
-    if (rec.status === 'recording' && now() < windowEnd(rec)) record(rec, { resumed: true });
+    if (rec.status === 'recording' && now() < windowEnd(rec)) startRecording(rec, { resumed: true });
     else queueFinish(rec.id);
   }
   setInterval(tick, 5_000);
@@ -44,9 +44,19 @@ function tick() {
         notify('Too many recordings at once', `${rec.title} is starting while ${jobs.size} other recordings are running `
           + `(limit ${limit}). The manager may refuse it until a stream frees up.`);
       }
-      record(rec);
+      startRecording(rec);
     }
   }
+}
+
+// Runs a recording; an unexpected error ends it (keeping what was recorded) instead of the whole recorder.
+function startRecording(rec, options) {
+  record(rec, options).catch((err) => {
+    log(`Recording #${rec.id} stopped by an error: ${err.stack || err.message}`);
+    jobs.delete(rec.id);
+    updateRecording(rec.id, { status: 'processing', error: `Last stream error: ${err.message}` });
+    queueFinish(rec.id);
+  });
 }
 
 async function record(rec, { resumed = false } = {}) {
@@ -172,7 +182,10 @@ function describeError(err) {
 // One MP4 at a time keeps the NAS responsive.
 let finishing = Promise.resolve();
 function queueFinish(id) {
-  finishing = finishing.then(() => finishOne(id)).catch((err) => log(`Finishing #${id} failed: ${err.message}`));
+  finishing = finishing.then(() => finishOne(id)).catch((err) => {
+    log(`Finishing #${id} failed: ${err.stack || err.message}`);
+    updateRecording(id, { status: 'failed', error: `Could not finish the recording: ${err.message}`, finished: now() });
+  });
   return finishing;
 }
 
