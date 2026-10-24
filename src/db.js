@@ -74,6 +74,8 @@ addColumn('channels', 'light_url', "TEXT NOT NULL DEFAULT ''");
 addColumn('recordings', 'use_light', 'INTEGER NOT NULL DEFAULT 0');
 // Days to keep after it finishes: NULL follows the default in Settings, 0 keeps it forever.
 addColumn('recordings', 'keep_days', 'INTEGER');
+// What's inside the finished file, e.g. "h264 1920×1080 · aac".
+addColumn('recordings', 'codecs', "TEXT NOT NULL DEFAULT ''");
 
 export const now = () => Math.floor(Date.now() / 1000);
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { config } from './config.js';
 import { db, getRecording, getSettings, now, updateRecording } from './db.js';
-import { finishRecording, listParts, sidecarFiles, workDirFor } from './finish.js';
+import { finishRecording, listParts, probe, sidecarFiles, workDirFor } from './finish.js';
 import { notify } from './notify.js';
 import { log } from './log.js';
 
@@ -26,6 +26,7 @@ export function startScheduler() {
   }
   setInterval(tick, 5_000);
   tick();
+  fillMissingCodecs();
   setInterval(applyRetention, 3600_000);
   applyRetention();
 }
@@ -145,6 +146,20 @@ async function record(rec, { resumed = false } = {}) {
   queueFinish(rec.id);
 }
 
+// Recordings made before codecs were stored get them filled in, one at a time.
+async function fillMissingCodecs() {
+  const rows = db.prepare("SELECT id, file FROM recordings WHERE file IS NOT NULL AND codecs = ''").all();
+  for (const { id, file } of rows) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      updateRecording(id, { codecs: (await probe(file)).codecs || '?' });
+    } catch (err) {
+      log(`Could not read #${id} (${file}): ${err.message}`);
+      updateRecording(id, { codecs: '?' });
+    }
+  }
+}
+
 function describeError(err) {
   const code = err.cause?.code || err.code || '';
   if (code === 'ECONNREFUSED') return 'the manager refused the connection (is it running?)';
@@ -179,7 +194,7 @@ async function finishOne(id) {
     updateRecording(id, {
       status: incomplete ? 'incomplete' : 'done',
       error: incomplete ? `About ${minutes} min missing (${rec.reconnects} reconnects).` : null,
-      file: result.file, size: result.size, duration: result.duration, finished: now(),
+      file: result.file, size: result.size, duration: result.duration, codecs: result.codecs, finished: now(),
     });
     log(`Recording finished: #${id} → ${result.file}`);
     if (incomplete) notify('Recording incomplete', `${rec.title} on ${rec.channel_name} is missing about ${minutes} min (${rec.reconnects} reconnects).`);

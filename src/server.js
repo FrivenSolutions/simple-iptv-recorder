@@ -30,6 +30,7 @@ route('GET', '/api/status', () => ({
   recordingNow: activeCount(),
   maxStreams: getSettings().maxStreams,
   timeZone: config.timeZone,
+  version: (process.env.APP_VERSION || 'dev').slice(0, 7),
 }));
 
 route('GET', '/api/groups', () => {
@@ -85,7 +86,7 @@ route('POST', '/api/channels/([^/]+)/favorite', (req, q, body, [id]) => {
 route('GET', '/api/recordings', (req, q) => {
   const upcoming = q.get('view') === 'upcoming';
   return db.prepare(`SELECT id, channel_id, channel_name, title, subtitle, descr, category, start, stop, pre_pad, post_pad,
-      from_guide, guide_note, status, error, reconnects, missing_seconds, file, size, duration, finished, keep_days, use_light,
+      from_guide, guide_note, status, error, reconnects, missing_seconds, file, size, duration, finished, keep_days, use_light, codecs,
       (SELECT c.light_url != '' FROM channels c WHERE c.id = recordings.channel_id) AS has_light
     FROM recordings WHERE status ${upcoming ? "IN ('scheduled', 'recording')" : "NOT IN ('scheduled', 'recording')"}
     ORDER BY start ${upcoming ? 'ASC' : 'DESC'}`).all()
@@ -238,7 +239,7 @@ function send(res, status, data) {
 }
 
 // Plays a finished recording in the browser, with seeking (HTTP ranges).
-function serveRecording(req, res, id) {
+function serveRecording(req, res, id, download) {
   const rec = getRecording(id);
   if (!rec?.file || !fs.existsSync(rec.file)) return send(res, 404, { error: 'File not found.' });
   const size = fs.statSync(rec.file).size;
@@ -246,7 +247,7 @@ function serveRecording(req, res, id) {
   const headers = {
     'Content-Type': 'video/mp4',
     'Accept-Ranges': 'bytes',
-    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(path.basename(rec.file))}`,
+    'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(path.basename(rec.file))}`,
   };
   if (range && (range[1] || range[2])) {
     let start = range[1] ? Number(range[1]) : size - Number(range[2]);
@@ -279,7 +280,7 @@ export function startServer() {
     const url = new URL(req.url, 'http://localhost');
     try {
       const file = url.pathname.match(/^\/files\/(\d+)$/);
-      if (file) return serveRecording(req, res, Number(file[1]));
+      if (file) return serveRecording(req, res, Number(file[1]), url.searchParams.has('download'));
       if (!url.pathname.startsWith('/api/')) return serveStatic(res, url.pathname);
       for (const r of routes) {
         const m = r.method === req.method && url.pathname.match(r.re);

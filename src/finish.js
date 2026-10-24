@@ -38,9 +38,17 @@ function run(cmd, args, { cwd, timeoutMs = 6 * 3600_000 } = {}) {
   });
 }
 
-export async function probeDuration(file) {
-  const out = await run(config.ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { timeoutMs: 120_000 });
-  return Number(out.trim()) || 0;
+// Length and contents of a finished file.
+export async function probe(file) {
+  const out = await run(config.ffprobe, ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height',
+    '-of', 'json', file], { timeoutMs: 120_000 });
+  const info = JSON.parse(out);
+  const streams = info.streams || [];
+  const video = streams.find((s) => s.codec_type === 'video');
+  const audio = streams.filter((s) => s.codec_type === 'audio').map((s) => s.codec_name);
+  const codecs = [video && `${video.codec_name}${video.width ? ` ${video.width}×${video.height}` : ''}`, [...new Set(audio)].join('+')]
+    .filter(Boolean).join(' · ');
+  return { duration: Number(info.format?.duration) || 0, codecs };
 }
 
 export async function finishRecording(rec) {
@@ -71,7 +79,7 @@ export async function finishRecording(rec) {
     '-f', 'mp4', 'joined.mp4',
   ], { cwd: work });
 
-  const duration = await probeDuration(tmp);
+  const { duration, codecs } = await probe(tmp);
   if (!(duration > 0)) throw new Error('The joined MP4 has no playable length.');
 
   const { dir, base, custom } = plannedPath(rec);
@@ -83,7 +91,7 @@ export async function finishRecording(rec) {
   await writeThumbnail(rec, dir, base, work, custom).catch(() => {});
 
   fs.rmSync(work, { recursive: true, force: true });
-  return { file, size: fs.statSync(file).size, duration };
+  return { file, size: fs.statSync(file).size, duration, codecs };
 }
 
 function moveFile(from, to) {

@@ -534,6 +534,13 @@ async function loadRecordings() {
   renderRecordings();
 }
 
+// Browsers play H.264 (and usually H.265) with AAC or MP3; AC-3 audio or MPEG-2 video needs VLC or a media server.
+function browserPlays(codecs) {
+  if (!codecs) return true;
+  const [video = '', audio = ''] = codecs.split(' · ');
+  return /^(h264|hevc)/.test(video) && (!audio || audio.split('+').every((a) => ['aac', 'mp3'].includes(a)));
+}
+
 function renderRecordings() {
   const filter = $('#recFilter').value.trim().toLowerCase();
   const list = (state.recordings || []).filter((r) => !filter
@@ -543,11 +550,13 @@ function renderRecordings() {
     return `<div class="item" data-id="${r.id}">
       <div class="title"><span class="badge ${r.status}">${label}</span>${esc(r.title)}${r.subtitle ? ` <span class="meta">— ${esc(r.subtitle)}</span>` : ''}</div>
       <div class="buttons">
-        ${r.file ? `<a href="/files/${r.id}" target="_blank" rel="noopener"><button>Play</button></a>` : ''}
+        ${r.file ? (browserPlays(r.codecs)
+          ? `<a href="/files/${r.id}" target="_blank" rel="noopener"><button>Play</button></a>`
+          : `<a href="/files/${r.id}?download=1"><button title="Your browser can't play ${esc(r.codecs)}; open it in VLC, Jellyfin or Plex">Download</button></a>`) : ''}
         ${r.status === 'failed' && r.error?.startsWith('Could not make') ? '<button data-act="retry">Retry</button>' : ''}
         ${r.status !== 'processing' ? '<button class="danger" data-act="delete">Delete</button>' : ''}
       </div>
-      <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.duration ? ` · ${fmtDuration(r.duration)}` : ''}${r.size ? ` · ${fmtSize(r.size)}` : ''}</div>
+      <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.duration ? ` · ${fmtDuration(r.duration)}` : ''}${r.size ? ` · ${fmtSize(r.size)}` : ''}${r.codecs ? ` · ${esc(r.codecs)}` : ''}</div>
       ${['done', 'incomplete'].includes(r.status) ? `<div class="meta pad">Keep ${keepSelect(r.keep_days, 'data-keep')}
         ${r.delete_after ? `· deletes ${fmtDay(r.delete_after)}` : ''}</div>` : ''}
       ${r.file ? `<div class="meta">${esc(r.file)}</div>` : ''}
@@ -639,7 +648,7 @@ function renderLineupInfo() {
   if (!s) return;
   $('#lineupInfo').innerHTML = `${s.channels} channels, ${s.programs} guide entries.
     ${s.lastRefresh ? `Last refreshed ${fmtDay(s.lastRefresh)} ${fmtTime(s.lastRefresh)}.` : 'Not refreshed yet.'}
-    At most ${s.maxStreams} recordings at once. Server time zone: ${esc(s.timeZone)}.
+    At most ${s.maxStreams} recordings at once. Server time zone: ${esc(s.timeZone)}. Version ${esc(s.version)}.
     ${s.error ? `<div class="err">${esc(s.error)}</div>` : ''}`;
 }
 
