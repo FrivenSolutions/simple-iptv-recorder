@@ -33,9 +33,19 @@ function run(cmd, args, { cwd, timeoutMs = 6 * 3600_000 } = {}) {
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code === 0) resolve(stdout);
-      else reject(new Error(stderr.trim().split('\n').slice(-3).join(' ') || `${cmd} exited with ${code}`));
+      else reject(new Error(readableError(stderr) || `${cmd} exited with ${code}`));
     });
   });
+}
+
+// The last few lines of ffmpeg's output, without its "[aac_adtstoasc @ 0x55d…]" tags.
+function readableError(stderr) {
+  return stderr
+    .split(/[\r\n]+/)
+    .map((line) => line.replace(/\[[\w-]+ @ (?:0x)?[0-9a-f]+\]\s*/gi, '').trim())
+    .filter(Boolean)
+    .slice(-3)
+    .join(' ');
 }
 
 // Length and contents of a finished file.
@@ -49,6 +59,16 @@ export async function probe(file) {
   const codecs = [video && `${video.codec_name}${video.width ? ` ${video.width}×${video.height}` : ''}`, [...new Set(audio)].join('+')]
     .filter(Boolean).join(' · ');
   return { duration: Number(info.format?.duration) || 0, codecs };
+}
+
+async function countAudioTracks(file) {
+  try {
+    const out = await run(config.ffprobe, ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'json', file],
+      { timeoutMs: 120_000 });
+    return JSON.parse(out).streams?.length || 0;
+  } catch {
+    return 1;
+  }
 }
 
 export async function finishRecording(rec) {
@@ -67,17 +87,44 @@ export async function finishRecording(rec) {
     fs.writeFileSync(path.join(work, 'parts.txt'), `${list}\n`);
     input.push('-f', 'concat', '-safe', '0', '-i', 'parts.txt');
   }
-  await run(config.ffmpeg, [
-    '-hide_banner', '-loglevel', 'error', '-y',
-    '-fflags', '+genpts+discardcorrupt',
-    // Look further into the stream for the picture size: a part can start between keyframes.
-    '-analyzeduration', '30M', '-probesize', '100M',
-    ...input,
-    '-map', '0:v:0?', '-map', '0:a?', '-dn', '-sn',
-    '-c', 'copy',
-    '-movflags', '+faststart',
-    '-f', 'mp4', 'joined.mp4',
-  ], { cwd: work });
+  // Copy every audio track if possible. Providers sometimes add a broken or
+  // mislabelled extra track, so fall back to one track at a time, then to
+  // re-encoding just the audio, then to the picture alone. The video is never re-encoded.
+  const audioTracks = await countAudioTracks(parts[0]);
+  const attempts = [{ maps: ['-map', '0:v:0?', '-map', '0:a?'], codec: ['-c', 'copy'], note: null }];
+  for (let i = 0; i < audioTracks && audioTracks > 1; i++) {
+    attempts.push({ maps: ['-map', '0:v:0?', '-map', `0:a:${i}`], codec: ['-c', 'copy'],
+      note: `Kept audio track ${i + 1} of ${audioTracks}; the others could not be copied.` });
+  }
+  for (let i = 0; i < Math.max(1, audioTracks); i++) {
+    attempts.push({ maps: ['-map', '0:v:0?', '-map', `0:a:${i}?`], codec: ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k'],
+      note: 'The audio could not be copied as it was, so it was converted to AAC (the video is untouched).' });
+  }
+  attempts.push({ maps: ['-map', '0:v:0'], codec: ['-c', 'copy'], note: 'The audio was unreadable, so this recording has no sound.' });
+
+  let firstError;
+  let note = null;
+  for (const attempt of attempts) {
+    try {
+      await run(config.ffmpeg, [
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-fflags', '+genpts+discardcorrupt',
+        // Look further into the stream for the picture size: a part can start between keyframes.
+        '-analyzeduration', '30M', '-probesize', '100M',
+        ...input,
+        ...attempt.maps, '-dn', '-sn',
+        ...attempt.codec,
+        '-movflags', '+faststart',
+        '-f', 'mp4', 'joined.mp4',
+      ], { cwd: work });
+      note = attempt.note;
+      break;
+    } catch (err) {
+      firstError ??= err;
+      fs.rmSync(tmp, { force: true });
+    }
+  }
+  if (!fs.existsSync(tmp)) throw firstError;
 
   const { duration, codecs } = await probe(tmp);
   if (!(duration > 0)) throw new Error('The joined MP4 has no playable length.');
@@ -91,7 +138,7 @@ export async function finishRecording(rec) {
   await writeThumbnail(rec, dir, base, work, custom).catch(() => {});
 
   fs.rmSync(work, { recursive: true, force: true });
-  return { file, size: fs.statSync(file).size, duration, codecs };
+  return { file, size: fs.statSync(file).size, duration, codecs, note };
 }
 
 function moveFile(from, to) {

@@ -206,7 +206,7 @@ async function finishOne(id) {
     const minutes = Math.round(rec.missing_seconds / 60);
     updateRecording(id, {
       status: incomplete ? 'incomplete' : 'done',
-      error: incomplete ? `About ${minutes} min missing (${rec.reconnects} reconnects).` : null,
+      error: [incomplete ? `About ${minutes} min missing (${rec.reconnects} reconnects).` : '', result.note || ''].filter(Boolean).join(' ') || null,
       file: result.file, size: result.size, duration: result.duration, codecs: result.codecs, finished: now(),
     });
     log(`Recording finished: #${id} → ${result.file}`);
@@ -220,7 +220,7 @@ async function finishOne(id) {
       notify('Recording failed', `${rec.title} on ${rec.channel_name}: too little was recorded to make a video.`);
       return;
     }
-    updateRecording(id, { status: 'failed', error: `Could not make the MP4: ${err.message.replace(/[w+ @ [0-9a-fx]+] /gi, '').replace(/s+/g, ' ')}`, finished: now() });
+    updateRecording(id, { status: 'failed', error: `Could not make the MP4: ${err.message}`, finished: now() });
     notify('Recording failed', `${rec.title} on ${rec.channel_name}: could not make the MP4 (${err.message}). The raw parts were kept; use Retry.`);
   }
 }
