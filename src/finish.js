@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { config } from './config.js';
-import { cleanName, isMovie, localParts, plannedPath } from './naming.js';
+import { cleanName, isMovie, localParts, plainTitle, plannedPath } from './naming.js';
 
 export function workDirFor(id) {
   return path.join(config.recordingsDir, '.inprogress', String(id));
@@ -168,16 +168,16 @@ function writeNfo(rec, dir, base, custom) {
   const genre = rec.category ? `  <genre>${xml(rec.category)}</genre>\n` : '';
   let body;
   if (isMovie(rec)) {
-    body = `<movie>\n  <title>${xml(rec.title)}</title>\n  <year>${date.slice(0, 4)}</year>\n  <premiered>${date}</premiered>\n`
+    body = `<movie>\n  <title>${xml(plainTitle(rec.title))}</title>\n  <year>${date.slice(0, 4)}</year>\n  <premiered>${date}</premiered>\n`
       + `  <plot>${xml(rec.descr)}</plot>\n${genre}  <studio>${xml(rec.channel_name)}</studio>\n</movie>\n`;
   } else {
     const episode = rec.season && rec.episode ? `  <season>${rec.season}</season>\n  <episode>${rec.episode}</episode>\n` : '';
-    body = `<episodedetails>\n  <title>${xml(rec.subtitle || `${rec.title} ${date}`)}</title>\n  <showtitle>${xml(rec.title)}</showtitle>\n`
+    body = `<episodedetails>\n  <title>${xml(plainTitle(rec.subtitle) || `${plainTitle(rec.title)} ${date}`)}</title>\n  <showtitle>${xml(plainTitle(rec.title))}</showtitle>\n`
       + `${episode}  <aired>${date}</aired>\n  <plot>${xml(rec.descr)}</plot>\n${genre}  <studio>${xml(rec.channel_name)}</studio>\n</episodedetails>\n`;
     // Automatic naming keeps each show in its own folder, which gets a tvshow.nfo.
     const showDir = path.basename(path.dirname(dir)) === 'TV' ? dir : path.dirname(dir);
     const showNfo = path.join(showDir, 'tvshow.nfo');
-    if (!custom && !fs.existsSync(showNfo)) fs.writeFileSync(showNfo, `<tvshow>\n  <title>${xml(rec.title)}</title>\n</tvshow>\n`);
+    if (!custom && !fs.existsSync(showNfo)) fs.writeFileSync(showNfo, `<tvshow>\n  <title>${xml(plainTitle(rec.title))}</title>\n</tvshow>\n`);
   }
   fs.writeFileSync(path.join(dir, `${base}.nfo`), `<?xml version="1.0" encoding="UTF-8"?>\n${body}`);
 }
@@ -192,7 +192,8 @@ async function writeThumbnail(rec, dir, base, work, custom) {
       '-vf', 'scale=1280:-2', '-frames:v', '1', 'thumb.jpg'], { cwd: work, timeoutMs: 60_000 }).then(() => true, () => false);
   }
   if (!made) {
-    const title = rec.title.length > 44 ? `${rec.title.slice(0, 42)}…` : rec.title;
+    const plain = plainTitle(rec.title) || rec.title;
+    const title = plain.length > 44 ? `${plain.slice(0, 42)}…` : plain;
     const { date } = localParts(rec.start);
     fs.writeFileSync(path.join(work, 'line1.txt'), title);
     fs.writeFileSync(path.join(work, 'line2.txt'), rec.subtitle ? cleanName(rec.subtitle, 70) : (rec.category || ''));

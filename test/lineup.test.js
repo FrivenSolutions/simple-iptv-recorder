@@ -83,3 +83,11 @@ test('fills in a custom file name format', async () => {
   assert.equal(rel(formatName('{type}/{title}', rec)), path.join('TV', 'NFL Bears @ Packers'));
   assert.equal(rel(formatName('{type}/{title}', { ...rec, category: 'Movie' })), path.join('Movies', 'NFL Bears @ Packers'));
 });
+
+test('drops the guide\'s superscript tags from file names', async () => {
+  const { plannedPath, plainTitle } = await import('../src/naming.js');
+  const start = Date.UTC(2026, 9, 24, 18, 0) / 1000;
+  assert.equal(plainTitle('Hoosiers at Wolverines ᴸᶦᵛᵉ'), 'Hoosiers at Wolverines');
+  assert.equal(plainTitle('Nuggets Live!  ᴸᶦᵛᵉ'), 'Nuggets Live!');
+  assert.equal(plannedPath({ title: 'Hoosiers at Wolverines ᴸᶦᵛᵉ', start }, '{date} {title}').base, '2026-10-24 Hoosiers at Wolverines');
+});

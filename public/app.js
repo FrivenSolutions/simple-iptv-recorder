@@ -70,7 +70,7 @@ function showTab(tab) {
   state.tab = tab;
   for (const b of document.querySelectorAll('.tabs button')) b.classList.toggle('active', b.dataset.tab === tab);
   for (const s of document.querySelectorAll('.tab')) s.classList.toggle('active', s.id === `tab-${tab}`);
-  if (tab === 'guide') renderRows();
+  if (tab === 'guide') { renderRows(); loadGuide(); }
   if (tab === 'scheduled') loadScheduled();
   if (tab === 'recordings') loadRecordings();
   if (tab === 'settings') loadSettings();
@@ -461,7 +461,8 @@ function refreshAfterChange() {
 async function loadScheduled() {
   const list = await api('GET', '/api/recordings?view=upcoming');
   $('#scheduledCount').textContent = list.length || '';
-  if (document.activeElement?.closest('#scheduledList')) return;
+  // Don't redraw under someone typing in a padding box; a focused button is fine.
+  if (document.activeElement?.matches('#scheduledList input, #scheduledList select')) return;
   $('#scheduledList').innerHTML = list.length ? list.map((r) => {
     const live = r.status === 'recording';
     const note = [r.guide_note, live && r.error ? r.error : '', live && r.reconnects ? `${r.reconnects} reconnects` : '']
@@ -705,7 +706,7 @@ async function loadStatus() {
 setInterval(() => {
   loadStatus();
   if (state.tab === 'scheduled') loadScheduled();
-  if (state.tab === 'recordings' && !document.activeElement?.closest('#tab-recordings')) loadRecordings();
+  if (state.tab === 'recordings' && !document.activeElement?.matches('#tab-recordings input, #tab-recordings select')) loadRecordings();
 }, 10_000);
 setInterval(() => { if (state.tab === 'guide' && !$('#guide').hidden) loadGuide(); }, 60_000);
 

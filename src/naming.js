@@ -8,8 +8,17 @@ import path from 'node:path';
 import { config } from './config.js';
 import { db, getSettings } from './db.js';
 
+// Guide titles carry tags in superscript letters, like "Hoosiers at Wolverines ᴸᶦᵛᵉ" or "ᴺᵉʷ".
+// They're useful in the guide but not in file names or library titles.
+export function plainTitle(text) {
+  return String(text || '')
+    .replace(/[ʰ-˿ᴬ-ᵪᶛ-ᶿ⁰-₟]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function cleanName(text, max = 120) {
-  const cleaned = String(text || '')
+  const cleaned = plainTitle(text)
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -56,7 +65,7 @@ export const TOKENS = {
 
 function tokenValues(rec) {
   const { date, time, year, month, day } = localParts(rec.start);
-  const number = rec.channel_number ?? db.prepare('SELECT number FROM channels WHERE id = ?').get(rec.channel_id)?.number;
+  const number = rec.channel_number ?? (rec.channel_id ? db.prepare('SELECT number FROM channels WHERE id = ?').get(rec.channel_id)?.number : null);
   const hasEpisode = rec.season && rec.episode;
   return {
     type: isMovie(rec) ? 'Movies' : 'TV',
