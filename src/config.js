@@ -38,4 +38,6 @@ export const settingDefaults = {
   pushbulletToken: env.PUSHBULLET_TOKEN || '',
   notifyOnSuccess: env.NOTIFY_ON_SUCCESS === 'true',
   preferLight: env.PREFER_LIGHT === 'true',
+  // Empty = automatic Jellyfin/Plex naming; see naming.js for the placeholders.
+  fileNameTemplate: env.FILE_NAME_FORMAT || '',
 };

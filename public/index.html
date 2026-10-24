@@ -81,6 +81,15 @@
           <p class="hint">Each recording can override this with its own "Keep for".</p>
         </fieldset>
         <fieldset>
+          <legend>File names</legend>
+          <label class="wide">Format <small>(leave empty for automatic Jellyfin/Plex names; <code>/</code> makes folders)</small>
+            <input name="fileNameTemplate" type="text" autocomplete="off" spellcheck="false"
+              placeholder="Automatic, e.g. TV/{title}/{title} - {date} - {subtitle}"></label>
+          <div id="tokenList" class="tokens"></div>
+          <div class="hint">Example: <code id="namePreview"></code></div>
+          <p class="hint">Applies to recordings that finish after you save. Blank placeholders drop out with their separator.</p>
+        </fieldset>
+        <fieldset>
           <legend>Stream</legend>
           <label class="check"><input name="preferLight" type="checkbox"> Record the light stream when a channel has one</label>
           <p class="hint">The light stream is the manager's converted stream for the channel. It counts toward the manager's

@@ -155,6 +155,9 @@ main { flex: 1; min-height: 0; display: flex; }
 .settings label { display: block; margin: 8px 0; }
 .settings label.wide input { display: block; width: 100%; margin-top: 4px; }
 .settings label.check input { margin-right: 6px; }
+.tokens { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.tokens button { font-size: 12px; padding: 2px 8px; font-family: ui-monospace, Consolas, monospace; }
+#namePreview { display: block; margin-top: 2px; white-space: pre-wrap; word-break: break-all; color: var(--text); }
 .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .msg { color: var(--muted); }
 .info { color: var(--muted); margin-bottom: 10px; }

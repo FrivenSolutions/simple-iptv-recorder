@@ -69,3 +69,15 @@ test('finds the guide next to the playlist', async () => {
   assert.equal(guideUrlFor('http://192.168.1.15:8080/o/tok/playlist.m3u'), 'http://192.168.1.15:8080/o/tok/epg.xml');
   assert.equal(guideUrlFor('http://x/other.m3u'), '');
 });
+
+test('fills in a custom file name format', async () => {
+  const { formatName } = await import('../src/naming.js');
+  const start = Date.UTC(2026, 9, 24, 0, 30) / 1000; // 19:30 on the 23rd in Chicago
+  const rec = { title: 'NFL: Bears @ Packers', channel_name: 'FOX', channel_number: 205, start, category: 'Sports', id: 7 };
+  const rel = (r) => path.join(path.relative(process.env.RECORDINGS_DIR, r.dir), `${r.base}`);
+  assert.equal(rel(formatName('{date} {time} {title} ({channel})', rec)), '2026-10-23 1930 NFL Bears @ Packers (FOX)');
+  assert.equal(rel(formatName('{title} - {se} - {subtitle}', rec)), 'NFL Bears @ Packers');
+  assert.equal(rel(formatName('Sports/{year}/{title} [{subtitle}]', rec)), path.join('Sports', '2026', 'NFL Bears @ Packers'));
+  assert.equal(rel(formatName('{title} {se}', { ...rec, season: 3, episode: 4 })), 'NFL Bears @ Packers S03E04');
+  assert.equal(rel(formatName('../{title}', rec)), 'NFL Bears @ Packers');
+});

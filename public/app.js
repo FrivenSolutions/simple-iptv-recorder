@@ -366,13 +366,21 @@ async function openProgramDialog(p, ch) {
     <div class="problem" hidden></div>
     <div class="actions">
       <button value="cancel" formnovalidate>Close</button>
-      ${existing ? `<button type="button" class="danger" id="dlgCancel">${existing.status === 'recording' ? 'Stop and delete' : 'Cancel recording'}</button>`
-        : p.stop > nowSec() ? '<button type="button" class="primary" id="dlgRecord">Record</button>' : ''}
+      ${existing?.status === 'recording'
+        ? '<button type="button" class="danger" id="dlgCancel">Stop and delete</button><button type="button" class="primary" id="dlgStop">Stop and save</button>'
+        : existing ? '<button type="button" class="danger" id="dlgCancel">Cancel recording</button>'
+          : p.stop > nowSec() ? '<button type="button" class="primary" id="dlgRecord">Record</button>' : ''}
     </div>`;
   form.querySelector('#dlgRecord')?.addEventListener('click', (e) => {
     submitRecording({ channelId: ch.id, programId: p.id, ...readOptions() }, e.currentTarget);
   });
+  form.querySelector('#dlgStop')?.addEventListener('click', async () => {
+    await api('POST', `/api/recordings/${existing.id}/stop`);
+    dialog.close();
+    refreshAfterChange();
+  });
   form.querySelector('#dlgCancel')?.addEventListener('click', async () => {
+    if (existing.status === 'recording' && !confirm('Stop this recording and delete what was recorded so far?')) return;
     await api('DELETE', `/api/recordings/${existing.id}`);
     dialog.close();
     refreshAfterChange();
@@ -459,7 +467,7 @@ async function loadScheduled() {
     return `<div class="item" data-id="${r.id}">
       <div class="title"><span class="badge ${r.status}">${live ? '● recording' : 'scheduled'}</span>${esc(r.title)}${r.subtitle ? ` <span class="meta">— ${esc(r.subtitle)}</span>` : ''}</div>
       <div class="buttons">
-        ${live ? '<button data-act="stop">Stop now</button><button class="danger" data-act="delete">Stop and delete</button>'
+        ${live ? '<button class="primary" data-act="stop">Stop and save</button><button class="danger" data-act="delete">Stop and delete</button>'
           : '<button class="danger" data-act="delete">Cancel</button>'}
       </div>
       <div class="meta">${fmtWhen(r.start, r.stop)} · ${esc(r.channel_name)}${r.from_guide ? '' : ' · by time'}${r.use_light && live ? ' · light stream' : ''}</div>
@@ -572,7 +580,31 @@ async function loadSettings() {
     if (input.type === 'checkbox') input.checked = v; else input.value = v;
   }
   renderLineupInfo();
+  previewName();
 }
+
+// File name format: clickable placeholders and a live example.
+const previewName = debounce(async () => {
+  const input = $('#settingsForm').elements.fileNameTemplate;
+  const { tokens, examples } = await api('GET', `/api/naming?format=${encodeURIComponent(input.value)}`);
+  if (!$('#tokenList').children.length) {
+    $('#tokenList').innerHTML = Object.entries(tokens)
+      .map(([k, help]) => `<button type="button" data-token="${k}" title="${esc(help)}">{${k}}</button>`).join('');
+  }
+  $('#namePreview').textContent = examples.join('\n');
+}, 200);
+$('#settingsForm').elements.fileNameTemplate.addEventListener('input', previewName);
+$('#tokenList').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-token]');
+  if (!btn) return;
+  const input = $('#settingsForm').elements.fileNameTemplate;
+  const at = input.selectionStart ?? input.value.length;
+  const token = `{${btn.dataset.token}}`;
+  input.value = input.value.slice(0, at) + token + input.value.slice(input.selectionEnd ?? at);
+  input.focus();
+  input.setSelectionRange(at + token.length, at + token.length);
+  previewName();
+});
 $('#settingsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.currentTarget;

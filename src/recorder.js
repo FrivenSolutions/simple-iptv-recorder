@@ -101,6 +101,7 @@ async function record(rec, { resumed = false } = {}) {
             if (!bytes && gapStart !== null) {
               missing += Math.max(0, now() - gapStart);
               gapStart = null;
+              if (lastError) updateRecording(rec.id, { error: null });
             }
             bytes += chunk.length;
             lastData = Date.now();

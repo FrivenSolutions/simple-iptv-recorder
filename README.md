@@ -89,8 +89,9 @@ The web page is on port 8089; to use another, change the left side of `8089:8089
   drop-down on a phone. Use **☆** to make a Favorites group. Use **‹ Now ›** and the date to move in time.
   Click a show to record it. Click a channel name, or *No guide data*, to **record by time**.
 - **Search** finds upcoming shows by title across every channel and group.
-- **Scheduled** lists what's coming and what's recording now. Change padding, cancel, or stop early
-  (stopping keeps what was recorded so far).
+- **Scheduled** lists what's coming and what's recording now. Change padding or cancel. A recording
+  in progress can be stopped early with **Stop and save** (it becomes an MP4 like any finished
+  recording) or **Stop and delete**. The same buttons appear when you click the show in the guide.
 - **Recordings** lists finished recordings with their status. You can play one in the browser,
   delete it (files included), or **Retry** if the MP4 step failed (the raw parts are kept for that).
 - **Keep for**: every recording has its own keep time (Default, Forever, or 1 day to a year).
@@ -125,6 +126,19 @@ Recordings/
 
 Your guide has no episode numbers, so most shows are named by air date, which both servers
 understand. A second airing on the same day gets the start time added (`… - 2026-10-24 - 1930.mp4`).
+
+While a recording is running, its parts are written to the hidden `.inprogress` folder. The
+finished MP4 is moved into place only once it's complete, so Jellyfin and Plex never scan a
+half-written file. Automatic naming splits `TV` and `Movies` because the two servers need them
+in separate library types.
+
+**Custom names.** Settings → File names takes a format instead, e.g.
+`{title}/{date} {time} {title} ({channel})`. A `/` makes folders, and the page shows a live example.
+Placeholders: `{title}`, `{subtitle}`, `{channel}`, `{number}`, `{date}` (2026-10-24), `{time}` (1930),
+`{year}`, `{month}`, `{day}`, `{se}` (S01E02), `{season}`, `{episode}`, `{category}`, `{id}`. A placeholder
+that's blank for a recording drops out along with its separator, so `{title} - {subtitle}` never
+ends in " - ". Custom names still get an `.nfo` and thumbnails, but no `tvshow.nfo` or movie
+`poster.jpg`. The format applies to recordings that finish after you save it.
 
 **Keep scores from being spoiled.** Plex and Jellyfin take a frame from the video when they find no
 artwork. The recorder always provides artwork, but turn frame-grabbing off too, because both

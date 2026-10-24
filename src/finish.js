@@ -72,13 +72,13 @@ export async function finishRecording(rec) {
   const duration = await probeDuration(tmp);
   if (!(duration > 0)) throw new Error('The joined MP4 has no playable length.');
 
-  const { dir, base } = plannedPath(rec);
+  const { dir, base, custom } = plannedPath(rec);
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${base}.mp4`);
   moveFile(tmp, file);
 
-  writeNfo(rec, dir, base);
-  await writeThumbnail(rec, dir, base, work).catch(() => {});
+  writeNfo(rec, dir, base, custom);
+  await writeThumbnail(rec, dir, base, work, custom).catch(() => {});
 
   fs.rmSync(work, { recursive: true, force: true });
   return { file, size: fs.statSync(file).size, duration };
@@ -106,7 +106,7 @@ export function sidecarFiles(file) {
 
 const xml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function writeNfo(rec, dir, base) {
+function writeNfo(rec, dir, base, custom) {
   const { date } = localParts(rec.start);
   const genre = rec.category ? `  <genre>${xml(rec.category)}</genre>\n` : '';
   let body;
@@ -117,16 +117,17 @@ function writeNfo(rec, dir, base) {
     const episode = rec.season && rec.episode ? `  <season>${rec.season}</season>\n  <episode>${rec.episode}</episode>\n` : '';
     body = `<episodedetails>\n  <title>${xml(rec.subtitle || `${rec.title} ${date}`)}</title>\n  <showtitle>${xml(rec.title)}</showtitle>\n`
       + `${episode}  <aired>${date}</aired>\n  <plot>${xml(rec.descr)}</plot>\n${genre}  <studio>${xml(rec.channel_name)}</studio>\n</episodedetails>\n`;
+    // Automatic naming keeps each show in its own folder, which gets a tvshow.nfo.
     const showDir = path.basename(path.dirname(dir)) === 'TV' ? dir : path.dirname(dir);
     const showNfo = path.join(showDir, 'tvshow.nfo');
-    if (!fs.existsSync(showNfo)) fs.writeFileSync(showNfo, `<tvshow>\n  <title>${xml(rec.title)}</title>\n</tvshow>\n`);
+    if (!custom && !fs.existsSync(showNfo)) fs.writeFileSync(showNfo, `<tvshow>\n  <title>${xml(rec.title)}</title>\n</tvshow>\n`);
   }
   fs.writeFileSync(path.join(dir, `${base}.nfo`), `<?xml version="1.0" encoding="UTF-8"?>\n${body}`);
 }
 
 // Uses the guide's artwork for the show when it has some; otherwise draws a
 // title card. Never a frame from the recording, so no scores leak.
-async function writeThumbnail(rec, dir, base, work) {
+async function writeThumbnail(rec, dir, base, work, custom) {
   const jpg = path.join(work, 'thumb.jpg');
   let made = false;
   if (rec.icon) {
@@ -148,7 +149,7 @@ async function writeThumbnail(rec, dir, base, work) {
       '-vf', [text('line1.txt', size, 'white', '(h/2)-110'), text('line2.txt', 38, '0xc9d3e3', '(h/2)'), text('line3.txt', 32, '0x8a97ab', '(h/2)+80')].join(','),
       '-frames:v', '1', 'thumb.jpg'], { cwd: work, timeoutMs: 60_000 });
   }
-  const targets = isMovie(rec) ? [path.join(dir, 'poster.jpg')] : [path.join(dir, `${base}.jpg`), path.join(dir, `${base}-thumb.jpg`)];
+  const targets = isMovie(rec) && !custom ? [path.join(dir, 'poster.jpg')] : [path.join(dir, `${base}.jpg`), path.join(dir, `${base}-thumb.jpg`)];
   for (const t of targets) fs.copyFileSync(jpg, t);
 }
 

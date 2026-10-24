@@ -7,6 +7,7 @@ import { db, getRecording, getSettings, now, saveSettings, updateRecording } fro
 import { lineupState, lineupWarnings, refreshLineup } from './lineup.js';
 import { activeCount, checkOverlap, deleteRecording, keepDaysOf, retryFinish, stopRecording } from './recorder.js';
 import { notify } from './notify.js';
+import { TOKENS, plannedPath } from './naming.js';
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
@@ -180,6 +181,24 @@ route('POST', '/api/recordings/(\\d+)/retry', (req, q, body, [id]) => {
 });
 
 route('GET', '/api/settings', () => getSettings());
+
+// Shows what a file name format gives, using a real upcoming show when there is one.
+route('GET', '/api/naming', (req, q) => {
+  const sample = db.prepare(`SELECT p.*, c.id AS channel_id, c.name AS channel_name, c.number AS channel_number
+    FROM programs p JOIN channels c ON c.tvg_id = p.tvg_id AND c.present = 1
+    WHERE p.stop > ? ORDER BY (p.season IS NOT NULL) DESC, (p.subtitle != '') DESC, p.start LIMIT 1`).get(now())
+    || { title: 'NFL Football', subtitle: 'Bears at Packers', channel_name: 'FOX', channel_number: 205, start: now(), category: 'Sports' };
+  const examples = [{ ...sample, id: 42 }];
+  if (!sample.season) examples.push({ ...sample, id: 43, title: 'Some Series', subtitle: 'Pilot', season: 1, episode: 2, category: 'Series' });
+  const template = q.get('format') ?? getSettings().fileNameTemplate;
+  return {
+    tokens: TOKENS,
+    examples: examples.map((rec) => {
+      const { dir, base } = plannedPath(rec, template);
+      return path.join(path.relative(config.recordingsDir, dir), `${base}.mp4`).split(path.sep).join('/');
+    }),
+  };
+});
 route('PUT', '/api/settings', (req, q, body) => saveSettings(body));
 route('POST', '/api/settings/test', async () => {
   const sent = await notify('Test from Simple IPTV Recorder', 'Notifications are working.');
