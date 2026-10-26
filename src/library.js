@@ -53,8 +53,9 @@ export function scheduleLibraryRefresh() {
 }
 
 // Asks each configured server to rescan its libraries. Returns the servers reached.
-export async function refreshLibraries() {
-  const s = getSettings();
+// `overrides` lets the Settings page's test button try values that aren't saved yet.
+export async function refreshLibraries(overrides = {}) {
+  const s = { ...getSettings(), ...overrides };
   const base = (url) => url.replace(/\/+$/, '');
   const jobs = [];
   if (s.jellyfinUrl && s.jellyfinApiKey) {

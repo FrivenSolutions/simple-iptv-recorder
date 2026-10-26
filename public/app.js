@@ -628,30 +628,40 @@ $('#tokenList').addEventListener('click', (e) => {
   input.setSelectionRange(at + token.length, at + token.length);
   previewName();
 });
-$('#settingsForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const f = e.currentTarget;
+// After a successful test, a reminder if the form holds changes that aren't saved.
+function unsavedNote() {
+  const saved = state.settings || {};
+  const changed = Object.entries(formValues()).some(([k, v]) => k in saved && String(saved[k]) !== String(v));
+  return changed ? ' Press Save to keep these settings.' : '';
+}
+
+// Everything currently in the Settings form, saved or not.
+function formValues() {
   const body = {};
-  for (const input of f.querySelectorAll('input[name]')) {
+  for (const input of $('#settingsForm').querySelectorAll('input[name]')) {
     body[input.name] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
   }
-  state.settings = await api('PUT', '/api/settings', body);
+  return body;
+}
+$('#settingsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  state.settings = await api('PUT', '/api/settings', formValues());
   $('#settingsMsg').textContent = 'Saved.';
   setTimeout(() => { $('#settingsMsg').textContent = ''; }, 2500);
 });
 $('#testLibrary').addEventListener('click', async () => {
   $('#libraryMsg').textContent = 'Asking…';
   try {
-    const r = await api('POST', '/api/settings/test-library');
-    $('#libraryMsg').textContent = `${r.reached.join(' and ')} started a rescan.`;
+    const r = await api('POST', '/api/settings/test-library', formValues());
+    $('#libraryMsg').textContent = `${r.reached.join(' and ')} started a rescan.${unsavedNote()}`;
   } catch (err) {
     $('#libraryMsg').textContent = err.message;
   }
 });
 $('#testNotify').addEventListener('click', async () => {
   try {
-    const r = await api('POST', '/api/settings/test');
-    $('#settingsMsg').textContent = `Sent to ${r.sent.join(' and ')}.`;
+    const r = await api('POST', '/api/settings/test', formValues());
+    $('#settingsMsg').textContent = `Sent to ${r.sent.join(' and ')}.${unsavedNote()}`;
   } catch (err) {
     $('#settingsMsg').textContent = err.message;
   }

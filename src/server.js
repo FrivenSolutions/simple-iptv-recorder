@@ -205,15 +205,21 @@ route('GET', '/api/naming', (req, q) => {
   };
 });
 route('PUT', '/api/settings', (req, q, body) => saveSettings(body));
-route('POST', '/api/settings/test', async () => {
-  const sent = await notify('Test from Simple IPTV Recorder', 'Notifications are working.');
-  if (!sent.length) throw new HttpError(400, 'Nothing was sent. Check the ntfy topic URL or Pushbullet token, then save first.');
+// The test buttons try what's in the form, saved or not.
+const pick = (body, keys) => Object.fromEntries(keys.filter((k) => typeof body[k] === 'string').map((k) => [k, body[k].trim()]));
+
+route('POST', '/api/settings/test', async (req, q, body) => {
+  const { sent, errors } = await notify('Test from Simple IPTV Recorder', 'Notifications are working.', {
+    settings: pick(body, ['ntfyUrl', 'ntfyToken', 'pushbulletToken']),
+  });
+  if (errors.length) throw new HttpError(502, errors.join(' '));
+  if (!sent.length) throw new HttpError(400, 'Fill in an ntfy topic URL or a Pushbullet token first.');
   return { sent };
 });
 
-route('POST', '/api/settings/test-library', async () => {
-  const { reached, errors } = await refreshLibraries();
-  if (!reached.length && !errors.length) throw new HttpError(400, 'Fill in a Jellyfin address and API key, or a Plex address and token, then save first.');
+route('POST', '/api/settings/test-library', async (req, q, body) => {
+  const { reached, errors } = await refreshLibraries(pick(body, ['jellyfinUrl', 'jellyfinApiKey', 'plexUrl', 'plexToken']));
+  if (!reached.length && !errors.length) throw new HttpError(400, 'Fill in a Jellyfin address and API key, or a Plex address and token first.');
   if (errors.length) throw new HttpError(502, errors.join(' '));
   return { reached };
 });
