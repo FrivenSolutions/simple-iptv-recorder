@@ -40,4 +40,11 @@ export const settingDefaults = {
   preferLight: env.PREFER_LIGHT === 'true',
   // Empty = automatic Jellyfin/Plex naming; see naming.js for the placeholders.
   fileNameTemplate: env.FILE_NAME_FORMAT || '',
+  // Warn when the recordings folder has less free space than this (0 = never).
+  minFreeGb: num(env.MIN_FREE_GB, 20),
+  // Media servers to tell about new recordings, so they show up without waiting for a scan.
+  jellyfinUrl: env.JELLYFIN_URL || '',
+  jellyfinApiKey: env.JELLYFIN_API_KEY || '',
+  plexUrl: env.PLEX_URL || '',
+  plexToken: env.PLEX_TOKEN || '',
 };

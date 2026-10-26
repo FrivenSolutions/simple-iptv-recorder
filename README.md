@@ -102,7 +102,8 @@ The web page is on port 8089; to use another, change the left side of `8089:8089
   stream), the record dialog and each scheduled item have a **Record the light stream** box.
   Settings decides whether that box starts ticked. Light streams count toward the manager's
   "At most at once" limit.
-- **Settings** has the stream limit, the refresh interval, default padding, default delete-after-X-days, the light-stream default, and
+- **Settings** has the stream limit, the refresh interval, default padding, default delete-after-X-days, the light-stream default,
+  file names, media servers to rescan, the low-disk warning, and
   notifications (with a test button).
 
 If the guide moves a scheduled show (same channel, same title, within 4 hours), the recording
@@ -165,8 +166,25 @@ Settings → Notifications:
   Add an access token if the topic is protected.
 - **Pushbullet**: an access token from pushbullet.com → Settings → Access Tokens.
 
-Missed, failed and incomplete recordings, guide changes, and "more recordings than streams"
-are always sent. *Done* messages are optional.
+Missed, failed and incomplete recordings, guide changes, "more recordings than streams" and a
+nearly full recordings share are always sent. *Done* messages are optional.
+
+## 6. Media servers and disk space
+
+**Settings → Media servers:** with a Jellyfin address and API key (Jellyfin Dashboard → API Keys),
+and/or a Plex address and token, the recorder asks them to rescan about 30 seconds after a recording
+finishes or is deleted, so it appears (or disappears) without waiting for their scheduled scan.
+That matters when the recordings live on a network share, where Jellyfin and Plex can't watch for new
+files. **Test rescan** checks the address and key.
+
+**Settings → Disk space:** below the set amount of free space (20 GB by default), a banner appears and
+a notification is sent when a recording starts, and at most twice a day otherwise. The free space is
+shown under Settings → Lineup.
+
+## Dashboards
+
+`/api/status` returns the state as JSON, e.g. for a [Homepage](https://gethomepage.dev) tile with the
+`customapi` widget: `recordingNow`, `maxStreams`, `channels`, `programs`, `freeBytes`, `warnings`.
 
 ## Troubleshooting
 

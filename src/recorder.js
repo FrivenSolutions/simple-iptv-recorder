@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { db, getRecording, getSettings, now, updateRecording } from './db.js';
 import { finishRecording, listParts, probe, sidecarFiles, workDirFor } from './finish.js';
 import { notify } from './notify.js';
+import { checkSpace, scheduleLibraryRefresh } from './library.js';
 import { log } from './log.js';
 
 const jobs = new Map();
@@ -26,6 +27,8 @@ export function startScheduler() {
   }
   setInterval(tick, 5_000);
   tick();
+  setInterval(checkSpace, 10 * 60_000);
+  checkSpace();
   fillMissingCodecs();
   setInterval(applyRetention, 3600_000);
   applyRetention();
@@ -44,6 +47,7 @@ function tick() {
         notify('Too many recordings at once', `${rec.title} is starting while ${jobs.size} other recordings are running `
           + `(limit ${limit}). The manager may refuse it until a stream frees up.`);
       }
+      checkSpace({ starting: true });
       startRecording(rec);
     }
   }
@@ -133,6 +137,8 @@ async function record(rec, { resumed = false } = {}) {
 
     if (bytes) partNo++;
     else fs.rmSync(part, { force: true });
+    // A stream that was flowing and then dropped is retried almost at once: every second is lost footage.
+    if (bytes) retryMs = 1_000;
     if (job.stop || now() >= end()) break;
 
     if (bytes) reconnects++;
@@ -216,6 +222,7 @@ async function finishOne(id) {
       file: result.file, size: result.size, duration: result.duration, codecs: result.codecs, finished: now(),
     });
     log(`Recording finished: #${id} → ${result.file}`);
+    scheduleLibraryRefresh();
     if (incomplete) notify('Recording incomplete', `${rec.title} on ${rec.channel_name} is missing about ${minutes} min (${rec.reconnects} reconnects).`);
     else notify('Recording done', `${rec.title} on ${rec.channel_name} is ready.`, { success: true });
   } catch (err) {
@@ -269,7 +276,10 @@ export function deleteRecording(id) {
     fs.rmSync(workDirFor(id), { recursive: true, force: true });
   }
   for (const f of sidecarFiles(rec.file)) fs.rmSync(f, { force: true });
-  if (rec.file) removeEmptyFolders(path.dirname(rec.file));
+  if (rec.file) {
+    removeEmptyFolders(path.dirname(rec.file));
+    scheduleLibraryRefresh();
+  }
   db.prepare('DELETE FROM recordings WHERE id = ?').run(id);
   return true;
 }

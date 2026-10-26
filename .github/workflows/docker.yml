@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      # The end-to-end recording test needs ffmpeg; without it that test is skipped.
+      - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
       - run: npm test
 
   image:

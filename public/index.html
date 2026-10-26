@@ -91,6 +91,20 @@
           <p class="hint">Applies to recordings that finish after you save. Blank placeholders drop out with their separator.</p>
         </fieldset>
         <fieldset>
+          <legend>Media servers</legend>
+          <p class="hint">Optional. After each recording finishes or is deleted, ask these to rescan, so it appears
+            (or disappears) without waiting for their next scan.</p>
+          <label class="wide">Jellyfin address <input name="jellyfinUrl" type="url" placeholder="http://192.168.1.20:8096"></label>
+          <label class="wide">Jellyfin API key <small>(Dashboard → API Keys)</small> <input name="jellyfinApiKey" type="password" autocomplete="off"></label>
+          <label class="wide">Plex address <input name="plexUrl" type="url" placeholder="http://192.168.1.20:32400"></label>
+          <label class="wide">Plex token <input name="plexToken" type="password" autocomplete="off"></label>
+          <div class="actions"><button type="button" id="testLibrary">Test rescan</button><span id="libraryMsg" class="msg"></span></div>
+        </fieldset>
+        <fieldset>
+          <legend>Disk space</legend>
+          <label>Warn when less than <input name="minFreeGb" type="number" min="0" max="100000"> GB is free on the recordings share <small>(0 = never)</small></label>
+        </fieldset>
+        <fieldset>
           <legend>Stream</legend>
           <label class="check"><input name="preferLight" type="checkbox"> Record the light stream when a channel has one</label>
           <p class="hint">The light stream is the manager's converted stream for the channel. It counts toward the manager's

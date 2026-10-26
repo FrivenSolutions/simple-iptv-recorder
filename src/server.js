@@ -8,6 +8,7 @@ import { lineupState, lineupWarnings, refreshLineup } from './lineup.js';
 import { activeCount, checkOverlap, deleteRecording, keepDaysOf, retryFinish, stopRecording } from './recorder.js';
 import { notify } from './notify.js';
 import { TOKENS, plannedPath } from './naming.js';
+import { freeBytes, lowSpaceWarning, refreshLibraries } from './library.js';
 
 const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
@@ -24,7 +25,8 @@ route('GET', '/api/status', () => ({
   lastRefresh: lineupState.lastRefresh,
   refreshing: lineupState.refreshing,
   error: lineupState.error,
-  warnings: lineupWarnings(),
+  warnings: [...lineupWarnings(), lowSpaceWarning()].filter(Boolean),
+  freeBytes: freeBytes(),
   channels: db.prepare('SELECT COUNT(*) AS n FROM channels WHERE present = 1').get().n,
   programs: db.prepare('SELECT COUNT(*) AS n FROM programs').get().n,
   recordingNow: activeCount(),
@@ -207,6 +209,13 @@ route('POST', '/api/settings/test', async () => {
   const sent = await notify('Test from Simple IPTV Recorder', 'Notifications are working.');
   if (!sent.length) throw new HttpError(400, 'Nothing was sent. Check the ntfy topic URL or Pushbullet token, then save first.');
   return { sent };
+});
+
+route('POST', '/api/settings/test-library', async () => {
+  const { reached, errors } = await refreshLibraries();
+  if (!reached.length && !errors.length) throw new HttpError(400, 'Fill in a Jellyfin address and API key, or a Plex address and token, then save first.');
+  if (errors.length) throw new HttpError(502, errors.join(' '));
+  return { reached };
 });
 
 route('POST', '/api/refresh', () => {

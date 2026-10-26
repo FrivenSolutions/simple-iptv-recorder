@@ -52,7 +52,7 @@ const fmtRecorded = (r) => {
   const early = r.ended < r.stop + r.post_pad * 60 - 60 ? ', stopped early' : '';
   return `recorded ${fmtTime(r.began)}–${fmtTime(r.ended)} (${r.pre_pad} min early, ${r.post_pad} after${early})`;
 };
-const fmtSize = (b) => (!b ? '' : b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
+const fmtSize = (b) => (!b ? '' : b > 1e12 ? `${(b / 1e12).toFixed(1)} TB` : b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
 const fmtDuration = (s) => {
   if (!s) return '';
   const h = Math.floor(s / 3600);
@@ -639,6 +639,15 @@ $('#settingsForm').addEventListener('submit', async (e) => {
   $('#settingsMsg').textContent = 'Saved.';
   setTimeout(() => { $('#settingsMsg').textContent = ''; }, 2500);
 });
+$('#testLibrary').addEventListener('click', async () => {
+  $('#libraryMsg').textContent = 'Asking…';
+  try {
+    const r = await api('POST', '/api/settings/test-library');
+    $('#libraryMsg').textContent = `${r.reached.join(' and ')} started a rescan.`;
+  } catch (err) {
+    $('#libraryMsg').textContent = err.message;
+  }
+});
 $('#testNotify').addEventListener('click', async () => {
   try {
     const r = await api('POST', '/api/settings/test');
@@ -678,7 +687,8 @@ function renderLineupInfo() {
   if (!s) return;
   $('#lineupInfo').innerHTML = `${s.channels} channels, ${s.programs} guide entries.
     ${s.lastRefresh ? `Last refreshed ${fmtDay(s.lastRefresh)} ${fmtTime(s.lastRefresh)}.` : 'Not refreshed yet.'}
-    At most ${s.maxStreams} recordings at once. Server time zone: ${esc(s.timeZone)}. Version ${esc(s.version)}.
+    At most ${s.maxStreams} recordings at once.${s.freeBytes != null ? ` ${fmtSize(s.freeBytes)} free on the recordings share.` : ''}
+    Server time zone: ${esc(s.timeZone)}. Version ${esc(s.version)}.
     ${s.error ? `<div class="err">${esc(s.error)}</div>` : ''}`;
 }
 
