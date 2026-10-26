@@ -93,7 +93,8 @@ The web page is on port 8089; to use another, change the left side of `8089:8089
   in progress can be stopped early with **Stop and save** (it becomes an MP4 like any finished
   recording) or **Stop and delete**. The same buttons appear when you click the show in the guide.
 - **Recordings** lists finished recordings with their status. You can play one in the browser,
-  delete it (files included), or **Retry** if the MP4 step failed (the raw parts are kept for that).
+  delete it (files included), or **Retry** if the MP4 step failed (the raw parts are kept for that,
+  for 7 days; failed recordings are then removed so their parts don't fill the disk).
 - **Keep for**: every recording has its own keep time (Default, Forever, or 1 day to a year).
   You set it when you record and can change it later on Scheduled or Recordings. *Default* follows
   the delete-after setting in Settings, and finished recordings show the date they'll be deleted.
@@ -121,7 +122,8 @@ Recordings/
       NCAA Football - 2026-10-24 - Iowa vs Ohio State-thumb.jpg   (Jellyfin thumbnail)
     Some Series/Season 02/Some Series - S02E05 - Title.mp4       (when the guide has episode numbers)
   Movies/
-    Jackie Brown (2026)/Jackie Brown (2026).mp4 + .nfo + poster.jpg
+    Jackie Brown (1997)/Jackie Brown (1997).mp4 + .nfo + poster.jpg   (release year from the guide;
+                                                                      left out when the guide has none)
 ```
 
 Your guide has no episode numbers, so most shows are named by air date, which both servers

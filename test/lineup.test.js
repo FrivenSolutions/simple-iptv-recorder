@@ -60,7 +60,7 @@ test('names files the way Jellyfin and Plex expect', () => {
   assert.equal(ep.base, 'Show - S01E02 - Pilot');
   assert.match(ep.dir, /Season 01$/);
   const movie = plannedPath({ title: 'Jackie Brown', category: 'Movie', start });
-  assert.equal(movie.base, 'Jackie Brown (2026)');
+  assert.equal(movie.base, 'Jackie Brown'); // no release year in the guide, so none in the name
   assert.equal(cleanName('a/b:c?'), 'a b c');
 });
 
@@ -90,4 +90,28 @@ test('drops the guide\'s superscript tags from file names', async () => {
   assert.equal(plainTitle('Hoosiers at Wolverines ᴸᶦᵛᵉ'), 'Hoosiers at Wolverines');
   assert.equal(plainTitle('Nuggets Live!  ᴸᶦᵛᵉ'), 'Nuggets Live!');
   assert.equal(plannedPath({ title: 'Hoosiers at Wolverines ᴸᶦᵛᵉ', start }, '{date} {title}').base, '2026-10-24 Hoosiers at Wolverines');
+});
+
+test('movies use the release year from the guide, not the airing year', async () => {
+  const { parseXMLTV } = await import('../src/lineup.js');
+  const { plannedPath } = await import('../src/naming.js');
+  const [p] = [...parseXMLTV(`<tv><programme start="20261024010000 +0000" stop="20261024030000 +0000" channel="X">
+    <title>Jackie Brown</title><date>1997</date><category>Movie</category></programme></tv>`)];
+  assert.equal(p.year, 1997);
+  const start = Date.UTC(2026, 9, 24, 18) / 1000;
+  assert.equal(plannedPath({ title: 'Jackie Brown', category: 'Movie', year: 1997, start }, '').base, 'Jackie Brown (1997)');
+  assert.equal(plannedPath({ title: 'Jackie Brown', category: 'Movie', start }, '').base, 'Jackie Brown');
+});
+
+test('overlapping recordings of one channel count as one stream', async () => {
+  const { db } = await import('../src/db.js');
+  const { checkOverlap } = await import('../src/recorder.js');
+  const add = db.prepare(`INSERT INTO recordings (channel_id, channel_name, title, start, stop, pre_pad, post_pad, status)
+    VALUES (?, ?, 'x', ?, ?, 0, 0, 'scheduled')`);
+  add.run('a', 'A', 1000, 5000);
+  add.run('a', 'A', 1000, 5000);
+  add.run('b', 'B', 1000, 5000);
+  assert.equal(checkOverlap(2000, 3000, 'a').peak, 2);
+  assert.equal(checkOverlap(2000, 3000, 'c').peak, 3);
+  assert.equal(checkOverlap(6000, 7000, 'c').peak, 1);
 });

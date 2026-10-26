@@ -18,8 +18,9 @@ const state = {
 async function api(method, url, body) {
   const res = await fetch(url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
+    // Every change is sent as JSON, which other websites can't do without the recorder's permission.
+    headers: method === 'GET' ? {} : { 'Content-Type': 'application/json' },
+    body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -45,6 +46,12 @@ const fmtDay = (t) => {
 const fmtWhen = (start, stop) => `${fmtDay(start)} ${fmtTime(start)}–${fmtTime(stop)}`;
 // The actual recording window, padding included.
 const fmtWindow = (r) => `${fmtTime(r.start - r.pre_pad * 60)}–${fmtTime(r.stop + r.post_pad * 60)}`;
+// What was really recorded, when known; otherwise the planned window.
+const fmtRecorded = (r) => {
+  if (!r.began || !r.ended) return `planned ${fmtWindow(r)} (${r.pre_pad} min early, ${r.post_pad} after)`;
+  const early = r.ended < r.stop + r.post_pad * 60 - 60 ? ', stopped early' : '';
+  return `recorded ${fmtTime(r.began)}–${fmtTime(r.ended)} (${r.pre_pad} min early, ${r.post_pad} after${early})`;
+};
 const fmtSize = (b) => (!b ? '' : b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
 const fmtDuration = (s) => {
   if (!s) return '';
@@ -374,7 +381,7 @@ async function openProgramDialog(p, ch) {
           : p.stop > nowSec() ? '<button type="button" class="primary" id="dlgRecord">Record</button>' : ''}
     </div>`;
   form.querySelector('#dlgRecord')?.addEventListener('click', (e) => {
-    submitRecording({ channelId: ch.id, programId: p.id, ...readOptions() }, e.currentTarget);
+    submitRecording({ channelId: ch.id, programId: p.id, programStart: p.start, ...readOptions() }, e.currentTarget);
   });
   form.querySelector('#dlgStop')?.addEventListener('click', async () => {
     await api('POST', `/api/recordings/${existing.id}/stop`).catch((err) => alert(err.message));
@@ -541,7 +548,7 @@ async function loadRecordings() {
 function browserPlays(codecs) {
   if (!codecs) return true;
   const [video = '', audio = ''] = codecs.split(' · ');
-  return /^(h264|hevc)/.test(video) && (!audio || audio.split('+').every((a) => ['aac', 'mp3'].includes(a)));
+  return /^(h264|hevc)\b/.test(video) && (!audio || audio.split('+').every((a) => ['aac', 'mp3'].includes(a)));
 }
 
 function renderRecordings() {
@@ -556,10 +563,10 @@ function renderRecordings() {
         ${r.file ? (browserPlays(r.codecs)
           ? `<a href="/files/${r.id}" target="_blank" rel="noopener"><button>Play</button></a>`
           : `<a href="/files/${r.id}?download=1"><button title="Your browser can't play ${esc(r.codecs)}; open it in VLC, Jellyfin or Plex">Download</button></a>`) : ''}
-        ${r.status === 'failed' && r.error?.startsWith('Could not make') ? '<button data-act="retry">Retry</button>' : ''}
+        ${r.status === 'failed' && /^Could not (make|finish)/.test(r.error || '') ? '<button data-act="retry">Retry</button>' : ''}
         ${r.status !== 'processing' ? '<button class="danger" data-act="delete">Delete</button>' : ''}
       </div>
-      <div class="meta">${fmtWhen(r.start, r.stop)} · recorded ${fmtWindow(r)} (${r.pre_pad} min early, ${r.post_pad} after) · ${esc(r.channel_name)}${r.duration ? ` · ${fmtDuration(r.duration)}` : ''}${r.size ? ` · ${fmtSize(r.size)}` : ''}${r.codecs ? ` · ${esc(r.codecs)}` : ''}</div>
+      <div class="meta">${fmtWhen(r.start, r.stop)} · ${fmtRecorded(r)} · ${esc(r.channel_name)}${r.duration ? ` · ${fmtDuration(r.duration)}` : ''}${r.size ? ` · ${fmtSize(r.size)}` : ''}${r.codecs ? ` · ${esc(r.codecs)}` : ''}</div>
       ${['done', 'incomplete'].includes(r.status) ? `<div class="meta pad">Keep ${keepSelect(r.keep_days, 'data-keep')}
         ${r.delete_after ? `· deletes ${fmtDay(r.delete_after)}` : ''}</div>` : ''}
       ${r.file ? `<div class="meta">${esc(r.file)}</div>` : ''}
@@ -703,6 +710,15 @@ async function loadStatus() {
   $('#scheduledCount').textContent = upcoming.length || '';
 }
 
+$('#banner').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-note]');
+  if (!btn) return;
+  const dismissed = JSON.parse(recall('dismissed') || '[]');
+  remember('dismissed', JSON.stringify([...dismissed, btn.dataset.note].slice(-20)));
+  btn.closest('p').remove();
+  $('#banner').hidden = !$('#banner p');
+});
+
 setInterval(() => {
   loadStatus();
   if (state.tab === 'scheduled') loadScheduled();
@@ -717,12 +733,3 @@ await loadStatus();
 loadSettingsData();
 await loadGroups();
 await loadGuide();
-
-$('#banner').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-note]');
-  if (!btn) return;
-  const dismissed = JSON.parse(recall('dismissed') || '[]');
-  remember('dismissed', JSON.stringify([...dismissed, btn.dataset.note].slice(-20)));
-  btn.closest('p').remove();
-  $('#banner').hidden = !$('#banner p');
-});

@@ -69,6 +69,7 @@ async function record(rec, { resumed = false } = {}) {
   let missing = rec.missing_seconds || 0;
   let reconnects = rec.reconnects || 0;
   let lastError = '';
+  let began = rec.began;
   let gapStart = now();
   if (resumed && partNo) {
     // Count the time the container was down as missing.
@@ -90,10 +91,11 @@ async function record(rec, { resumed = false } = {}) {
     let bytes = 0;
     let retryMs = 5_000;
     try {
-      const res = await fetch(channel.url, {
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000 + (end() - now()) * 1000)]),
-        headers: { 'User-Agent': 'simple-iptv-recorder' },
-      });
+      // Only connecting has a time limit; once data flows, the watchdog below handles
+      // stalls and the end time (which can move if the padding is changed meanwhile).
+      const connectTimer = setTimeout(() => controller.abort(new Error('the manager did not answer')), 20_000);
+      const res = await fetch(channel.url, { signal: controller.signal, headers: { 'User-Agent': 'simple-iptv-recorder' } })
+        .finally(() => clearTimeout(connectTimer));
       if (!res.ok) {
         res.body?.cancel().catch(() => {});
         lastError = res.status === 503 ? 'HTTP 503: the manager is at its stream limit' : `HTTP ${res.status} from the stream`;
@@ -112,6 +114,7 @@ async function record(rec, { resumed = false } = {}) {
               missing += Math.max(0, now() - gapStart);
               gapStart = null;
               if (lastError) updateRecording(rec.id, { error: null });
+              if (!began) updateRecording(rec.id, { began: (began = now()) });
             }
             bytes += chunk.length;
             lastData = Date.now();
@@ -152,7 +155,10 @@ async function record(rec, { resumed = false } = {}) {
     return;
   }
   if (!channel) lastError = 'the channel is no longer in the playlist';
-  updateRecording(rec.id, { status: 'processing', reconnects, missing_seconds: missing, error: lastError ? `Last stream error: ${lastError}` : null });
+  updateRecording(rec.id, {
+    status: 'processing', reconnects, missing_seconds: missing, ended: began ? Math.min(now(), end()) : null,
+    error: lastError ? `Last stream error: ${lastError}` : null,
+  });
   queueFinish(rec.id);
 }
 
@@ -286,10 +292,13 @@ export function keepDaysOf(rec) {
   return rec.keep_days ?? getSettings().retentionDays;
 }
 
+// Failed recordings keep their raw parts for Retry, but only for a week: they can be gigabytes.
+const FAILED_KEEP_DAYS = 7;
+
 function applyRetention() {
-  const finished = db.prepare("SELECT id, title, keep_days, finished FROM recordings WHERE status IN ('done', 'incomplete')").all();
+  const finished = db.prepare("SELECT id, title, status, keep_days, finished FROM recordings WHERE status IN ('done', 'incomplete', 'failed')").all();
   for (const rec of finished) {
-    const days = keepDaysOf(rec);
+    const days = rec.status === 'failed' ? FAILED_KEEP_DAYS : keepDaysOf(rec);
     if (!days || rec.finished >= now() - days * 86400) continue;
     deleteRecording(rec.id);
     log(`Deleted after ${days} days: #${rec.id} ${rec.title}`);
@@ -298,18 +307,23 @@ function applyRetention() {
 
 // Recordings that would overlap the given window. "over" is true when adding
 // one more would need more streams than the manager allows.
-export function checkOverlap(start, end, excludeId = 0) {
-  const others = db.prepare(`SELECT id, title, channel_name, start, stop, pre_pad, post_pad FROM recordings
+// Recordings of the same channel share one stream at the manager, so channels are counted, not recordings.
+export function checkOverlap(start, end, channelId, excludeId = 0) {
+  const others = db.prepare(`SELECT id, title, channel_id, channel_name, start, stop, pre_pad, post_pad FROM recordings
     WHERE status IN ('scheduled', 'recording') AND id != ?
       AND start - pre_pad * 60 < ? AND stop + post_pad * 60 > ?`).all(excludeId, end, start);
   const events = [];
   for (const r of others) {
-    events.push([Math.max(windowStart(r), start), 1], [Math.min(windowEnd(r), end), -1]);
+    events.push([Math.max(windowStart(r), start), 1, r.channel_id], [Math.min(windowEnd(r), end), -1, r.channel_id]);
   }
   events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  let current = 1;
+  const open = new Map([[channelId, 1]]);
   let peak = 1;
-  for (const [, delta] of events) peak = Math.max(peak, (current += delta));
+  for (const [, delta, channel] of events) {
+    const count = (open.get(channel) || 0) + delta;
+    if (count) open.set(channel, count); else open.delete(channel);
+    peak = Math.max(peak, open.size);
+  }
   const limit = getSettings().maxStreams;
   return { over: peak > limit, peak, limit, overlapping: others };
 }

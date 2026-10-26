@@ -86,7 +86,7 @@ route('POST', '/api/channels/([^/]+)/favorite', (req, q, body, [id]) => {
 route('GET', '/api/recordings', (req, q) => {
   const upcoming = q.get('view') === 'upcoming';
   return db.prepare(`SELECT id, channel_id, channel_name, title, subtitle, descr, category, start, stop, pre_pad, post_pad,
-      from_guide, guide_note, status, error, reconnects, missing_seconds, file, size, duration, finished, keep_days, use_light, codecs,
+      from_guide, guide_note, status, error, reconnects, missing_seconds, file, size, duration, finished, keep_days, use_light, codecs, began, ended,
       (SELECT c.light_url != '' FROM channels c WHERE c.id = recordings.channel_id) AS has_light
     FROM recordings WHERE status ${upcoming ? "IN ('scheduled', 'recording')" : "NOT IN ('scheduled', 'recording')"}
     ORDER BY start ${upcoming ? 'ASC' : 'DESC'}`).all()
@@ -113,7 +113,9 @@ route('POST', '/api/recordings', (req, q, body) => {
 
   let rec;
   if (body.programId) {
-    const p = db.prepare('SELECT * FROM programs WHERE id = ?').get(body.programId);
+    // Guide refreshes renumber programs, so an id from an open page can point at a
+    // different show by now. Find it by channel and start time instead.
+    const p = db.prepare('SELECT * FROM programs WHERE tvg_id = ? AND start = ?').get(channel.tvg_id, Number(body.programStart));
     if (!p) throw new HttpError(404, 'That program is no longer in the guide. Refresh the page.');
     rec = { ...p, from_guide: 1 };
   } else {
@@ -129,16 +131,16 @@ route('POST', '/api/recordings', (req, q, body) => {
     AND status IN ('scheduled', 'recording')`).get(channel.id, rec.stop, rec.start);
   if (duplicate) throw new HttpError(409, 'Something on this channel is already scheduled at that time.');
 
-  const overlap = checkOverlap(rec.start - prePad * 60, rec.stop + postPad * 60);
+  const overlap = checkOverlap(rec.start - prePad * 60, rec.stop + postPad * 60, channel.id);
   if (overlap.over && !body.force) {
     throw new HttpError(409, `This would need ${overlap.peak} streams at once; the limit is ${overlap.limit}.`, { overlap });
   }
 
   const result = db.prepare(`INSERT INTO recordings (channel_id, channel_name, tvg_id, title, subtitle, descr, category, season, episode, icon,
-      start, stop, pre_pad, post_pad, from_guide, keep_days, use_light, status, created)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)`).run(
+      start, stop, pre_pad, post_pad, from_guide, keep_days, use_light, year, status, created)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)`).run(
     channel.id, channel.name, rec.tvg_id || '', rec.title, rec.subtitle || '', rec.descr || '', rec.category || '',
-    rec.season ?? null, rec.episode ?? null, rec.icon || '', rec.start, rec.stop, prePad, postPad, rec.from_guide, keepDays, useLight ? 1 : 0, now());
+    rec.season ?? null, rec.episode ?? null, rec.icon || '', rec.start, rec.stop, prePad, postPad, rec.from_guide, keepDays, useLight ? 1 : 0, rec.year ?? null, now());
   return { id: Number(result.lastInsertRowid) };
 });
 
@@ -285,7 +287,10 @@ export function startServer() {
       for (const r of routes) {
         const m = r.method === req.method && url.pathname.match(r.re);
         if (!m) continue;
-        const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req) : {};
+        if (req.method !== 'GET' && !String(req.headers['content-type']).startsWith('application/json')) {
+          throw new HttpError(415, 'Changes must be sent as JSON.');
+        }
+        const body = req.method === 'GET' ? {} : await readBody(req);
         return send(res, 200, await r.handler(req, url.searchParams, body, m.slice(1)));
       }
       throw new HttpError(404, 'Not found.');

@@ -103,9 +103,10 @@ export function formatName(template, rec) {
 
 function automaticName(rec) {
   const show = cleanName(rec.title);
-  const { date, year } = localParts(rec.start);
+  const { date } = localParts(rec.start);
   if (isMovie(rec)) {
-    const base = `${show} (${year})`;
+    // "Title (1997)" helps Jellyfin and Plex find the right film; the airing year would mislead them.
+    const base = rec.year ? `${show} (${rec.year})` : show;
     return { dir: path.join(config.recordingsDir, 'Movies', base), base };
   }
   const episodeTitle = rec.subtitle ? ` - ${cleanName(rec.subtitle, 80)}` : '';

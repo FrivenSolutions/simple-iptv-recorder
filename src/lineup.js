@@ -119,6 +119,7 @@ export function* parseXMLTV(text) {
       subtitle: first('sub-title'),
       descr: first('desc'),
       category: first('category'),
+      year: Number(first('date').match(/^(1[89]|20)\d\d/)?.[0]) || null,
       icon,
       ...parseEpisode(tagsOf(inner, 'episode-num')),
     };
@@ -160,11 +161,11 @@ export async function refreshLineup() {
       const cutoff = now() - 6 * 3600;
       transaction(() => {
         db.exec('DELETE FROM programs');
-        const insert = db.prepare(`INSERT INTO programs (tvg_id, start, stop, title, subtitle, descr, category, season, episode, icon)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        const insert = db.prepare(`INSERT INTO programs (tvg_id, start, stop, title, subtitle, descr, category, season, episode, icon, year)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         for (const p of parseXMLTV(text)) {
           if (p.stop < cutoff || !wanted.has(p.tvg_id)) continue;
-          insert.run(p.tvg_id, p.start, p.stop, p.title, p.subtitle, p.descr, p.category, p.season, p.episode, p.icon);
+          insert.run(p.tvg_id, p.start, p.stop, p.title, p.subtitle, p.descr, p.category, p.season, p.episode, p.icon, p.year);
           programs++;
         }
       });

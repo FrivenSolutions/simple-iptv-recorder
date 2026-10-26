@@ -76,6 +76,12 @@ addColumn('recordings', 'use_light', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('recordings', 'keep_days', 'INTEGER');
 // What's inside the finished file, e.g. "h264 1920×1080 · aac".
 addColumn('recordings', 'codecs', "TEXT NOT NULL DEFAULT ''");
+// Release year from the guide's <date>, for movies (not the year it aired).
+addColumn('programs', 'year', 'INTEGER');
+addColumn('recordings', 'year', 'INTEGER');
+// When data actually started and stopped arriving (padding and early stops included).
+addColumn('recordings', 'began', 'INTEGER');
+addColumn('recordings', 'ended', 'INTEGER');
 
 export const now = () => Math.floor(Date.now() / 1000);
 

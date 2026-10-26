@@ -11,6 +11,13 @@ if (!config.m3uUrl) log('M3U_URL is not set: add it to the container environment
 
 // Log anything that slips through rather than stopping every recording.
 process.on('unhandledRejection', (err) => log(`Unexpected error: ${err?.stack || err}`));
+// Exit at once when Docker stops the container; running recordings resume on start-up.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    log(`${signal}: stopping.`);
+    process.exit(0);
+  });
+}
 
 startServer();
 startScheduler();

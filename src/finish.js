@@ -168,7 +168,7 @@ function writeNfo(rec, dir, base, custom) {
   const genre = rec.category ? `  <genre>${xml(rec.category)}</genre>\n` : '';
   let body;
   if (isMovie(rec)) {
-    body = `<movie>\n  <title>${xml(plainTitle(rec.title))}</title>\n  <year>${date.slice(0, 4)}</year>\n  <premiered>${date}</premiered>\n`
+    body = `<movie>\n  <title>${xml(plainTitle(rec.title))}</title>\n${rec.year ? `  <year>${rec.year}</year>\n` : ''}`
       + `  <plot>${xml(rec.descr)}</plot>\n${genre}  <studio>${xml(rec.channel_name)}</studio>\n</movie>\n`;
   } else {
     const episode = rec.season && rec.episode ? `  <season>${rec.season}</season>\n  <episode>${rec.episode}</episode>\n` : '';
@@ -187,7 +187,7 @@ function writeNfo(rec, dir, base, custom) {
 async function writeThumbnail(rec, dir, base, work, custom) {
   const jpg = path.join(work, 'thumb.jpg');
   let made = false;
-  if (rec.icon) {
+  if (/^https?:\/\//i.test(rec.icon || '')) {
     made = await run(config.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', rec.icon,
       '-vf', 'scale=1280:-2', '-frames:v', '1', 'thumb.jpg'], { cwd: work, timeoutMs: 60_000 }).then(() => true, () => false);
   }
