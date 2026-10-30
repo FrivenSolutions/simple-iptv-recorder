@@ -9,6 +9,7 @@ import { db, getRecording, getSettings, now, updateRecording } from './db.js';
 import { finishRecording, listParts, probe, sidecarFiles, workDirFor } from './finish.js';
 import { notify } from './notify.js';
 import { checkSpace, scheduleLibraryRefresh } from './library.js';
+import { lineupState, refreshLineup } from './lineup.js';
 import { log } from './log.js';
 
 const jobs = new Map();
@@ -36,6 +37,12 @@ export function startScheduler() {
 
 function tick() {
   const t = now();
+  // Event slots get reassigned on game day, so a recording about to start gets a fresh guide
+  // (which also moves it if its show changed channel). At most every 30 minutes.
+  const soon = db.prepare(`SELECT 1 FROM recordings WHERE status = 'scheduled' AND from_guide = 1
+    AND start - pre_pad * 60 BETWEEN ? AND ?`).get(t, t + 15 * 60);
+  if (soon && !lineupState.refreshing && t - lineupState.lastRefresh > 30 * 60) refreshLineup();
+
   const due = db.prepare("SELECT * FROM recordings WHERE status = 'scheduled' AND start - pre_pad * 60 <= ?").all(t);
   for (const rec of due) {
     if (t >= windowEnd(rec)) {

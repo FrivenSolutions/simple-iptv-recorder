@@ -12,6 +12,8 @@ const state = {
   settings: null,
   status: null,
   tab: 'guide',
+  // The guide keeps up with the clock until you page to another time; Now turns this back on.
+  followNow: true,
 };
 
 // ---------- helpers ----------
@@ -136,6 +138,7 @@ function alignNow() {
 
 async function loadGuide() {
   if (!state.group) return;
+  if (state.followNow) state.start = alignNow();
   const group = state.group;
   const data = await api('GET', `/api/guide?group=${encodeURIComponent(group)}&start=${state.start}&hours=${state.hours}`);
   if (group !== state.group) return;
@@ -237,6 +240,7 @@ $('#guideRows').addEventListener('click', async (e) => {
 });
 
 function shift(seconds) {
+  state.followNow = seconds === null;
   state.start = seconds === null ? alignNow() : state.start + seconds;
   loadGuide();
 }
@@ -249,6 +253,7 @@ $('#dayPick').addEventListener('change', (e) => {
   const current = new Date(state.start * 1000);
   day.setHours(current.getHours(), current.getMinutes());
   state.start = Math.floor(day.getTime() / 1000);
+  state.followNow = false;
   loadGuide();
 });
 

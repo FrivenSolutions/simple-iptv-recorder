@@ -202,21 +202,54 @@ export function lineupWarnings() {
     + `${hasLight && !preferLight ? ', or turn on "Record the light stream" in Settings' : ''}.`];
 }
 
+// Words in a channel name, for telling feeds of the same event apart ("Bulls In-Arena" vs "Bucks In-Arena").
+const nameWords = (name) => new Set(String(name || '').toLowerCase().match(/[a-z0-9]+/g) || []);
+
+// The same show on another channel: the provider's event slots ("NBA 05: …") are
+// reassigned between games, so a game can move to a different slot after it was scheduled.
+// Prefers the same group and the channel whose name is most like the original.
+function findElsewhere(rec) {
+  const options = db.prepare(`SELECT p.*, c.id AS channel_id, c.name AS channel_name, c.grp FROM programs p
+    JOIN channels c ON c.tvg_id = p.tvg_id AND c.present = 1
+    WHERE p.title = ? AND p.start BETWEEN ? AND ? AND c.id != ?`).all(rec.title, rec.start - 4 * 3600, rec.start + 4 * 3600, rec.channel_id);
+  if (!options.length) return null;
+  const original = db.prepare('SELECT grp FROM channels WHERE id = ?').get(rec.channel_id);
+  const words = nameWords(rec.channel_name);
+  // The bracketed part names the feed, e.g. "(Wizards In-Arena)": the same feed matters most.
+  const feed = (name) => (String(name || '').match(/\(([^)]*)\)\s*[^()]*$/)?.[1] || '').trim().toLowerCase();
+  const score = (o) => (o.grp === original?.grp ? 100 : 0)
+    + (feed(rec.channel_name) && feed(o.channel_name) === feed(rec.channel_name) ? 50 : 0)
+    + [...nameWords(o.channel_name)].filter((w) => words.has(w)).length * 10
+    - Math.abs(o.start - rec.start) / 3600;
+  return options.sort((a, b) => score(b) - score(a))[0];
+}
+
 // A scheduled show that the guide now lists at a different time (same channel,
-// same title, within 4 hours) is moved. One that has vanished gets a notice.
-function followGuideChanges() {
+// same title, within 4 hours) is moved; one that moved to another channel follows it.
+// One that has vanished gets a notice.
+export function followGuideChanges() {
   const scheduled = db.prepare("SELECT * FROM recordings WHERE status = 'scheduled' AND from_guide = 1").all();
   const candidates = db.prepare(`SELECT * FROM programs WHERE tvg_id = ? AND title = ?
     AND start BETWEEN ? AND ? ORDER BY ABS(start - ?) LIMIT 1`);
   const coverage = db.prepare('SELECT MAX(stop) AS last FROM programs WHERE tvg_id = ?');
+  const channelNow = db.prepare('SELECT tvg_id, present FROM channels WHERE id = ?');
+  const when = (t) => new Date(t * 1000).toLocaleString('en-US', { timeZone: config.timeZone, dateStyle: 'medium', timeStyle: 'short' });
   for (const rec of scheduled) {
-    const match = candidates.get(rec.tvg_id, rec.title, rec.start - 4 * 3600, rec.start + 4 * 3600, rec.start);
+    const current = channelNow.get(rec.channel_id);
+    const match = current?.present ? candidates.get(current.tvg_id, rec.title, rec.start - 4 * 3600, rec.start + 4 * 3600, rec.start) : null;
+    const moved = match ? null : findElsewhere(rec);
     if (match) {
       if (match.start !== rec.start || match.stop !== rec.stop) {
-        const when = (t) => new Date(t * 1000).toLocaleString('en-US', { timeZone: config.timeZone, dateStyle: 'medium', timeStyle: 'short' });
         updateRecording(rec.id, { start: match.start, stop: match.stop, guide_note: `Moved by the guide from ${when(rec.start)}` });
         notify('Recording moved', `${rec.title} on ${rec.channel_name} now runs ${when(match.start)}–${when(match.stop).split(', ').pop()}.`);
       }
+    } else if (moved) {
+      updateRecording(rec.id, {
+        channel_id: moved.channel_id, channel_name: moved.channel_name, tvg_id: moved.tvg_id,
+        start: moved.start, stop: moved.stop, guide_note: `Moved by the guide from ${rec.channel_name}`,
+      });
+      notify('Recording moved to another channel', `${rec.title} is now on ${moved.channel_name} (was ${rec.channel_name}), ${when(moved.start)}.`);
+      log(`Recording #${rec.id} followed ${rec.title} from ${rec.channel_name} to ${moved.channel_name}.`);
     } else if (!rec.guide_note?.startsWith('Not in the guide')) {
       const last = coverage.get(rec.tvg_id)?.last || 0;
       if (last >= rec.stop) {

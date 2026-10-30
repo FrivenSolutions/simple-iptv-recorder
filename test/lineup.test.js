@@ -115,3 +115,24 @@ test('overlapping recordings of one channel count as one stream', async () => {
   assert.equal(checkOverlap(2000, 3000, 'c').peak, 3);
   assert.equal(checkOverlap(6000, 7000, 'c').peak, 1);
 });
+
+test('a scheduled game follows its show to another event slot, on the matching feed', async () => {
+  const { db } = await import('../src/db.js');
+  const { followGuideChanges } = await import('../src/lineup.js');
+  const ch = db.prepare(`INSERT INTO channels (id, number, name, grp, url, tvg_id, sort, present) VALUES (?, 0, ?, 'Sports | NBA', 'http://x', ?, 0, 1)`);
+  ch.run('m9815', 'NBA 03: Wizards vs Raptors (Wizards In-Arena)', 'NBA.03');
+  ch.run('m9817', 'NBA 05: Wizards vs Raptors (Raptors In-Arena)', 'NBA.05');
+  ch.run('m9818', 'NBA 06: Wizards vs Raptors (Wizards In-Arena)', 'NBA.06');
+  const prog = db.prepare('INSERT INTO programs (tvg_id, start, stop, title) VALUES (?, ?, ?, ?)');
+  const start = 2_000_000_000;
+  // The game was scheduled on NBA 03, but the guide now has it on NBA 05 and NBA 06 (one feed per team).
+  prog.run('NBA.03', start, start + 9000, 'Hornets at Hawks');
+  prog.run('NBA.05', start, start + 9000, 'Wizards at Raptors');
+  prog.run('NBA.06', start, start + 9000, 'Wizards at Raptors');
+  const { lastInsertRowid } = db.prepare(`INSERT INTO recordings (channel_id, channel_name, tvg_id, title, start, stop, pre_pad, post_pad, from_guide, status)
+    VALUES ('m9815', 'NBA 03: Wizards vs Raptors (Wizards In-Arena)', 'NBA.03', 'Wizards at Raptors', ?, ?, 0, 0, 1, 'scheduled')`).run(start, start + 9000);
+  followGuideChanges();
+  const rec = db.prepare('SELECT channel_id, guide_note FROM recordings WHERE id = ?').get(lastInsertRowid);
+  assert.equal(rec.channel_id, 'm9818', 'moved to the Wizards feed, not the Raptors one');
+  assert.match(rec.guide_note, /Moved by the guide from NBA 03/);
+});
