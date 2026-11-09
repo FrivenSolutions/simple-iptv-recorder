@@ -91,11 +91,17 @@ async function record(rec, { resumed = false } = {}) {
   updateRecording(rec.id, { status: 'recording', error: null });
   log(`Recording ${resumed ? 'resumed' : 'started'}: #${rec.id} ${rec.title} on ${rec.channel_name}`);
 
-  const row = db.prepare('SELECT url, light_url FROM channels WHERE id = ?').get(rec.channel_id);
-  const channel = row && { url: rec.use_light && row.light_url ? row.light_url : row.url };
+  // Read before every connection, so a playlist refresh (which may change the URL) takes effect at once.
+  const streamUrl = () => {
+    const row = db.prepare('SELECT url, light_url FROM channels WHERE id = ?').get(rec.channel_id);
+    return row && (rec.use_light && row.light_url ? row.light_url : row.url);
+  };
   const end = () => windowEnd(getRecording(rec.id) || rec);
+  let failingSince = null;
+  let warned = false;
+  let url;
 
-  while (channel && !job.stop && now() < end()) {
+  while ((url = streamUrl()) && !job.stop && now() < end()) {
     const part = path.join(work, `part-${String(partNo + 1).padStart(3, '0')}.ts`);
     const controller = new AbortController();
     job.controller = controller;
@@ -105,7 +111,7 @@ async function record(rec, { resumed = false } = {}) {
       // Only connecting has a time limit; once data flows, the watchdog below handles
       // stalls and the end time (which can move if the padding is changed meanwhile).
       const connectTimer = setTimeout(() => controller.abort(new Error('the manager did not answer')), 20_000);
-      const res = await fetch(channel.url, { signal: controller.signal, headers: { 'User-Agent': 'simple-iptv-recorder' } })
+      const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'simple-iptv-recorder' } })
         .finally(() => clearTimeout(connectTimer));
       if (!res.ok) {
         res.body?.cancel().catch(() => {});
@@ -139,7 +145,7 @@ async function record(rec, { resumed = false } = {}) {
       }
     } catch (err) {
       const reason = controller.signal.reason?.message;
-      lastError = reason && reason !== 'finished' ? reason : describeError(err);
+      lastError = reason && reason !== 'finished' ? reason : describeError(err, url);
     }
 
     if (bytes) partNo++;
@@ -150,6 +156,17 @@ async function record(rec, { resumed = false } = {}) {
 
     if (bytes) reconnects++;
     if (gapStart === null) gapStart = now();
+    // Nothing for minutes: the stream's address may have changed, so reload the playlist
+    // (at most every 10 minutes), and tell the user once instead of failing silently until the end.
+    if (bytes) failingSince = null;
+    else failingSince ??= now();
+    if (failingSince !== null && now() - failingSince >= 120 && !lineupState.refreshing
+      && now() - lineupState.lastRefresh > 600) refreshLineup();
+    if (failingSince !== null && now() - failingSince >= 300 && !warned) {
+      warned = true;
+      notify('Recording is not getting the stream', `${rec.title} on ${rec.channel_name}: ${lastError}. `
+        + 'Still retrying until the end time.');
+    }
     log(`Recording #${rec.id}: ${lastError}; reconnecting.`);
     updateRecording(rec.id, { reconnects, missing_seconds: missing, error: `Reconnecting: ${lastError}` });
     // Wait before reconnecting, but wake at once if the recording is stopped meanwhile.
@@ -167,7 +184,7 @@ async function record(rec, { resumed = false } = {}) {
     fs.rmSync(work, { recursive: true, force: true });
     return;
   }
-  if (!channel) lastError = 'the channel is no longer in the playlist';
+  if (!url && !job.stop && now() < end()) lastError = 'the channel is no longer in the playlist';
   updateRecording(rec.id, {
     status: 'processing', reconnects, missing_seconds: missing, ended: began ? Math.min(now(), end()) : null,
     error: lastError ? `Last stream error: ${lastError}` : null,
@@ -189,11 +206,13 @@ async function fillMissingCodecs() {
   }
 }
 
-function describeError(err) {
+function describeError(err, url) {
   const code = err.cause?.code || err.code || '';
-  if (code === 'ECONNREFUSED') return 'the manager refused the connection (is it running?)';
-  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'the manager\'s address could not be found';
-  if (code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT') return 'the manager did not answer';
+  let host = 'the stream\'s server';
+  try { host = new URL(url).host; } catch {}
+  if (code === 'ECONNREFUSED') return `${host} refused the connection (is it running?)`;
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return `the address ${host} could not be looked up (DNS)`;
+  if (code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT') return `${host} did not answer`;
   if (code === 'UND_ERR_SOCKET' || code === 'ECONNRESET' || err.message === 'terminated') return 'the connection dropped';
   return err.cause?.message || err.message;
 }
