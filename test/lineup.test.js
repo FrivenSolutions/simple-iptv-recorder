@@ -136,3 +136,15 @@ test('a scheduled game follows its show to another event slot, on the matching f
   assert.equal(rec.channel_id, 'm9818', 'moved to the Wizards feed, not the Raptors one');
   assert.match(rec.guide_note, /Moved by the guide from NBA 03/);
 });
+
+test('manager stream links use the address the playlist was fetched from', async () => {
+  const { viaPlaylistHost } = await import('../src/lineup.js');
+  const playlist = 'http://192.168.1.15:8080/o/abc123/playlist.m3u';
+  assert.equal(viaPlaylistHost('https://iptv.example.me/s/abc123/2178.ts', playlist), 'http://192.168.1.15:8080/s/abc123/2178.ts');
+  assert.equal(viaPlaylistHost('https://iptv.example.me/light/abc123/2178.ts', playlist), 'http://192.168.1.15:8080/light/abc123/2178.ts');
+  // Not the manager's (different token, or the provider's own link): left alone.
+  assert.equal(viaPlaylistHost('https://iptv.example.me/s/other/2178.ts', playlist), 'https://iptv.example.me/s/other/2178.ts');
+  assert.equal(viaPlaylistHost('https://056.provider.click/live/u/p/20084.ts', playlist), 'https://056.provider.click/live/u/p/20084.ts');
+  // A manager behind a path prefix keeps it.
+  assert.equal(viaPlaylistHost('https://iptv.example.me/tv/s/abc123/5.ts', 'http://nas:8080/tv/o/abc123/playlist.m3u'), 'http://nas:8080/tv/s/abc123/5.ts');
+});

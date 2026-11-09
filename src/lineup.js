@@ -42,6 +42,25 @@ export function parseM3U(text) {
   return channels;
 }
 
+// The manager writes its stream links with its public address (often a DDNS name).
+// Links carrying the playlist's own token are pointed at the address the playlist was
+// fetched from instead, so recordings don't depend on DNS or the internet round trip.
+export function viaPlaylistHost(url, playlistUrl) {
+  try {
+    const playlist = new URL(playlistUrl);
+    const token = playlist.pathname.match(/\/o\/([^/]+)\//)?.[1];
+    const link = new URL(url);
+    if (!token || !link.pathname.match(new RegExp(`^(?:/[^/]+)*/(?:s|light)/${token}/`))) return url;
+    if (link.origin === playlist.origin) return url;
+    // Keep any path prefix the manager sits under (e.g. behind a reverse proxy) from the playlist URL.
+    const prefix = playlist.pathname.slice(0, playlist.pathname.indexOf(`/o/${token}/`));
+    const rest = link.pathname.slice(link.pathname.search(new RegExp(`/(?:s|light)/${token}/`)));
+    return `${playlist.origin}${prefix}${rest}${link.search}`;
+  } catch {
+    return url;
+  }
+}
+
 // The manager's stream links look like /s/<token>/<channel id>.ts (or /light/...).
 // Its channel id stays the same when the output changes, so schedules survive renames.
 function channelIdFromUrl(url) {
@@ -151,7 +170,8 @@ export async function refreshLineup() {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         ON CONFLICT(id) DO UPDATE SET number = excluded.number, name = excluded.name, grp = excluded.grp, logo = excluded.logo,
           url = excluded.url, light_url = excluded.light_url, tvg_id = excluded.tvg_id, sort = excluded.sort, present = 1`);
-      channels.forEach((c, i) => upsert.run(c.id, c.number, c.name, c.grp, c.logo, c.url, c.light_url, c.tvg_id, i));
+      const local = (url) => url && viaPlaylistHost(url, config.m3uUrl);
+      channels.forEach((c, i) => upsert.run(c.id, c.number, c.name, c.grp, c.logo, local(c.url), local(c.light_url), c.tvg_id, i));
     });
 
     let programs = 0;
