@@ -42,7 +42,8 @@ route('GET', '/api/groups', () => {
   return [{ name: FAVORITES, label: 'Favorites', count: favorites }, ...groups.map((g) => ({ ...g, label: g.name }))];
 });
 
-const CHANNEL_ORDER = 'ORDER BY number IS NULL, number, sort';
+// The playlist's own order: the manager's sort for this output, as IPTV apps show it.
+const CHANNEL_ORDER = 'ORDER BY sort';
 
 route('GET', '/api/guide', (req, q) => {
   const start = Number(q.get('start')) || now();
@@ -69,7 +70,7 @@ route('GET', '/api/search', (req, q) => {
       c.id AS channel_id, c.name AS channel_name, c.number AS channel_number, c.grp, c.light_url != '' AS has_light
     FROM programs p JOIN channels c ON c.tvg_id = p.tvg_id AND c.present = 1
     WHERE p.stop > ? AND (p.title LIKE ? ESCAPE '\\' OR p.subtitle LIKE ? ESCAPE '\\')
-    ORDER BY p.start, c.number LIMIT 300`).all(now(), like, like);
+    ORDER BY p.start, c.sort LIMIT 300`).all(now(), like, like);
 });
 
 route('GET', '/api/channels', (req, q) => {
